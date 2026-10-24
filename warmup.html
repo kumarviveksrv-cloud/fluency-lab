@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#0A0E1A">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>Morning Warm-Up · Fluency Lab</title>
+  <link rel="stylesheet" href="css/design-system.css">
+</head>
+<body>
+<div class="app-shell">
+
+  <!-- HEADER -->
+  <header class="app-header">
+    <button class="btn-icon btn-secondary" onclick="NAV.back()">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="15 18 9 12 15 6"/>
+      </svg>
+    </button>
+    <div class="header-title">Morning Warm-Up</div>
+    <div style="width:44px;"></div>
+  </header>
+
+  <!-- CONTENT -->
+  <main class="app-content">
+
+    <!-- STEP PROGRESS -->
+    <div class="session-header">
+      <div class="flex items-center justify-between">
+        <span class="session-step-label" id="stepLabel">Step 1 of 4</span>
+        <span class="body-xs text-muted" id="stepTime">~5 min</span>
+      </div>
+      <div class="step-progress" id="stepProgress">
+        <div class="step-dot active" id="dot1"></div>
+        <div class="step-dot" id="dot2"></div>
+        <div class="step-dot" id="dot3"></div>
+        <div class="step-dot" id="dot4"></div>
+      </div>
+    </div>
+
+    <!-- STEPS CONTAINER -->
+    <div id="step1" class="step-content fade-in">
+      <div class="session-title mb-2">Wake Up Your Mouth</div>
+      <p class="body-md text-secondary mb-6">Physical activation before any speaking. Takes 2 minutes.</p>
+
+      <div class="card mb-4">
+        <div class="subheading mb-3">Complete these in order:</div>
+        <div id="physicalChecks">
+          <div class="checkbox-item" id="check0" onclick="toggleCheck(0)">
+            <div class="checkbox-box" id="checkBox0"></div>
+            <div>
+              <div class="checkbox-text">Tongue rolls</div>
+              <div class="body-xs text-muted">Roll your tongue — 20 times</div>
+            </div>
+          </div>
+          <div class="checkbox-item" id="check1" onclick="toggleCheck(1)">
+            <div class="checkbox-box" id="checkBox1"></div>
+            <div>
+              <div class="checkbox-text">Lip trills</div>
+              <div class="body-xs text-muted">Lips relaxed, blow air — 20 times</div>
+            </div>
+          </div>
+          <div class="checkbox-item" id="check2" onclick="toggleCheck(2)">
+            <div class="checkbox-box" id="checkBox2"></div>
+            <div>
+              <div class="checkbox-text">Jaw drops</div>
+              <div class="body-xs text-muted">Open wide, release tension — 10 times</div>
+            </div>
+          </div>
+          <div class="checkbox-item" id="check3" onclick="toggleCheck(3)">
+            <div class="checkbox-box" id="checkBox3"></div>
+            <div>
+              <div class="checkbox-text">Vocal humming</div>
+              <div class="body-xs text-muted">Hum to activate cords — 30 seconds</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <button class="btn btn-primary btn-lg" id="step1Next" onclick="goToStep(2)" disabled>
+        Continue →
+      </button>
+    </div>
+
+    <div id="step2" class="step-content hidden fade-in">
+      <div class="session-title mb-2">Articulation Drill</div>
+      <p class="body-md text-secondary mb-6">Train your tongue-teeth coordination. The classic actor's exercise.</p>
+
+      <div class="phrase-card mb-4">
+        <div class="phrase-text">
+          "The lips, the teeth,<br>
+          the tip of the tongue"
+        </div>
+      </div>
+
+      <div class="card mb-4">
+        <div class="subheading mb-3">Say it 3 times:</div>
+        <div class="list" style="gap:var(--space-2)">
+          <div class="checkbox-item" id="artCheck0" onclick="toggleArtCheck(0)">
+            <div class="checkbox-box" id="artBox0"></div>
+            <div class="checkbox-text">Normal speed</div>
+          </div>
+          <div class="checkbox-item" id="artCheck1" onclick="toggleArtCheck(1)">
+            <div class="checkbox-box" id="artBox1"></div>
+            <div>
+              <div class="checkbox-text">With pen in teeth (optional)</div>
+              <div class="body-xs text-muted">Hold pen lightly — overtraining effect</div>
+            </div>
+          </div>
+          <div class="checkbox-item" id="artCheck2" onclick="toggleArtCheck(2)">
+            <div class="checkbox-box" id="artBox2"></div>
+            <div class="checkbox-text">Slightly faster</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Record attempt -->
+      <div class="card mb-4">
+        <div class="subheading mb-3">Record your attempt</div>
+        <div class="flex items-center gap-4 justify-center" style="padding:1rem 0;">
+          <button class="record-btn" id="artRecordBtn">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+              <line x1="12" y1="19" x2="12" y2="23"/>
+              <line x1="8" y1="23" x2="16" y2="23"/>
+            </svg>
+          </button>
+        </div>
+        <p class="body-xs text-muted text-center">Tap to record · Tap again to play back</p>
+      </div>
+
+      <button class="btn btn-primary btn-lg" id="step2Next" onclick="goToStep(3)">
+        Continue →
+      </button>
+    </div>
+
+    <div id="step3" class="step-content hidden fade-in">
+      <div class="session-title mb-2">Absorb the Character</div>
+      <p class="body-md text-secondary mb-6">Just listen. Don't try to copy yet. Let the rhythm sink in.</p>
+
+      <div class="card-teal mb-4" id="characterPrimeCard">
+        <div class="flex items-center gap-3 mb-4">
+          <div style="font-size:36px;">🎭</div>
+          <div>
+            <div class="heading" id="primeCharName">Patrick Jane</div>
+            <div class="body-sm text-secondary" id="primeCharArchetype">The Charming Consultant</div>
+          </div>
+        </div>
+        <p class="body-sm text-secondary">
+          Notice the pace. The pauses. How unhurried it feels.
+          That's the energy you're absorbing.
+        </p>
+      </div>
+
+      <div class="list mb-6" id="clipsList">
+        <!-- Populated by JS from Airtable -->
+        <div class="audio-player">
+          <button class="audio-play-btn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          </button>
+          <div class="flex-1">
+            <div class="body-sm">Reference Clip 1</div>
+            <div class="audio-waveform mt-1"><div class="audio-progress" style="width:0%"></div></div>
+          </div>
+          <span class="audio-duration">—:——</span>
+        </div>
+      </div>
+
+      <button class="btn btn-primary btn-lg" id="step3Next" onclick="goToStep(4)">
+        Continue →
+      </button>
+    </div>
+
+    <div id="step4" class="step-content hidden fade-in">
+      <div class="session-title mb-2">How do you feel now?</div>
+      <p class="body-md text-secondary mb-6">Rate your tongue-tie after the warm-up.</p>
+
+      <div class="card mb-4">
+        <div class="flex items-center justify-between mb-2">
+          <span class="body-sm text-secondary">Before</span>
+          <span class="body-sm text-secondary">After</span>
+        </div>
+        <div class="flex items-center justify-between mb-4">
+          <span class="display-sm" id="beforeScore" style="color:var(--rose);">7</span>
+          <div style="flex:1;height:2px;background:var(--navy-border);margin:0 1rem;"></div>
+          <span class="display-sm" id="afterScoreDisplay" style="color:var(--teal);">5</span>
+        </div>
+
+        <div class="subheading mb-3">Tongue-tie score (after)</div>
+        <div class="slider-wrap">
+          <input type="range" class="slider" id="afterSlider" min="1" max="10" value="5">
+          <span class="slider-label" id="afterSliderVal">5</span>
+        </div>
+      </div>
+
+      <div class="card-glass mb-6" id="improvementCard">
+        <!-- Shows improvement message -->
+      </div>
+
+      <button class="btn btn-primary btn-lg" onclick="completeWarmup()">
+        ✅ Complete Warm-Up
+      </button>
+    </div>
+
+  </main>
+</div>
+
+<script src="js/app.js"></script>
+<script src="js/airtable.js"></script>
+<script src="js/audio.js"></script>
+<script>
+  // ─── STATE ───────────────────────────────────
+  let currentStep = 1;
+  let physicalChecked = [false, false, false, false];
+  let artChecked = [false, false, false];
+  let beforeScore = STORE.getTongueTieScore() || 5;
+
+  // Show before score
+  document.getElementById('beforeScore').textContent = beforeScore;
+
+  // ─── CHECKBOX LOGIC ──────────────────────────
+  function toggleCheck(i) {
+    physicalChecked[i] = !physicalChecked[i];
+    const item = document.getElementById(`check${i}`);
+    const box = document.getElementById(`checkBox${i}`);
+    item.classList.toggle('checked', physicalChecked[i]);
+    box.innerHTML = physicalChecked[i]
+      ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>'
+      : '';
+
+    // Enable Next when all checked
+    const allChecked = physicalChecked.every(Boolean);
+    document.getElementById('step1Next').disabled = !allChecked;
+  }
+
+  function toggleArtCheck(i) {
+    artChecked[i] = !artChecked[i];
+    const item = document.getElementById(`artCheck${i}`);
+    const box = document.getElementById(`artBox${i}`);
+    item.classList.toggle('checked', artChecked[i]);
+    box.innerHTML = artChecked[i]
+      ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>'
+      : '';
+  }
+
+  // ─── STEP NAVIGATION ─────────────────────────
+  function goToStep(n) {
+    // Hide current
+    document.getElementById(`step${currentStep}`).classList.add('hidden');
+
+    // Update dots
+    const prevDot = document.getElementById(`dot${currentStep}`);
+    prevDot.classList.remove('active');
+    prevDot.classList.add('complete');
+
+    // Show next
+    currentStep = n;
+    document.getElementById(`step${currentStep}`).classList.remove('hidden');
+    document.getElementById(`step${currentStep}`).classList.add('fade-in');
+    document.getElementById(`dot${currentStep}`).classList.add('active');
+    document.getElementById('stepLabel').textContent = `Step ${currentStep} of 4`;
+
+    // Step-specific init
+    if (currentStep === 4) {
+      initStep4();
+    }
+
+    window.scrollTo(0, 0);
+  }
+
+  // ─── AFTER SLIDER ────────────────────────────
+  function initStep4() {
+    const afterSlider = document.getElementById('afterSlider');
+    const afterVal = document.getElementById('afterSliderVal');
+    const afterDisplay = document.getElementById('afterScoreDisplay');
+    const improvCard = document.getElementById('improvementCard');
+
+    function updateImprovement() {
+      const after = parseInt(afterSlider.value);
+      afterVal.textContent = after;
+      afterDisplay.textContent = after;
+
+      const diff = beforeScore - after;
+      if (diff > 0) {
+        improvCard.innerHTML = `
+          <div class="flex items-center gap-3" style="color:var(--teal);">
+            <span style="font-size:28px;">🎯</span>
+            <div>
+              <div class="heading">+${diff} point${diff > 1 ? 's' : ''} improvement</div>
+              <div class="body-sm" style="color:var(--text-secondary);">Your warm-up is working. Keep this consistent.</div>
+            </div>
+          </div>
+        `;
+      } else if (diff === 0) {
+        improvCard.innerHTML = `
+          <p class="body-sm text-secondary">Score unchanged — that's okay. Some days take longer to warm up.</p>
+        `;
+      } else {
+        improvCard.innerHTML = `
+          <p class="body-sm text-secondary">Feeling more tense is normal some mornings. The physical work still helps.</p>
+        `;
+      }
+    }
+
+    afterSlider.addEventListener('input', updateImprovement);
+    updateImprovement();
+  }
+
+  // ─── AUDIO RECORDING (Articulation) ─────────
+  const artRecordBtn = document.getElementById('artRecordBtn');
+  let artBlob = null;
+  let artURL = null;
+  let artAudio = null;
+
+  artRecordBtn.addEventListener('click', async () => {
+    if (AUDIO.isRecording) {
+      AUDIO.stopRecording();
+      return;
+    }
+    if (artURL) {
+      // Play back
+      if (artAudio && !artAudio.paused) {
+        artAudio.pause();
+        artRecordBtn.innerHTML = ICONS.play;
+        artRecordBtn.style.background = 'var(--teal)';
+      } else {
+        artAudio = AUDIO.play(artURL, {
+          onEnd: () => {
+            artRecordBtn.innerHTML = ICONS.mic;
+            artRecordBtn.style.background = 'var(--teal)';
+          }
+        });
+        artRecordBtn.innerHTML = ICONS.pause;
+        artRecordBtn.style.background = 'var(--rose)';
+      }
+      return;
+    }
+
+    artRecordBtn.classList.add('recording');
+    const started = await AUDIO.startRecording({
+      maxSeconds: 30,
+      onComplete: async (blob) => {
+        artBlob = blob;
+        artURL = AUDIO.createAudioURL(blob);
+        artRecordBtn.classList.remove('recording');
+        artRecordBtn.innerHTML = ICONS.play;
+        artRecordBtn.style.background = 'var(--teal)';
+        TOAST.success('Recorded! Tap to play back.');
+      }
+    });
+  });
+
+  // ─── COMPLETE WARMUP ─────────────────────────
+  async function completeWarmup() {
+    const afterScore = parseInt(document.getElementById('afterSlider').value);
+
+    // Save to local storage
+    STORE.setWarmupDone();
+
+    // Try to save to Airtable
+    try {
+      const mission = await AIRTABLE.getTodayMission();
+      if (mission) {
+        await AIRTABLE.update('Practice Sessions', mission.id, {
+          'Tongue Tie Score (Before)': beforeScore,
+          'Tongue Tie Score (After)': afterScore,
+        });
+      }
+    } catch (e) {
+      console.error('Could not save warm-up data:', e);
+    }
+
+    TOAST.success('Warm-up complete! 🎯');
+    setTimeout(() => NAV.go('index.html'), 1000);
+  }
+
+  // ─── INIT ─────────────────────────────────────
+  document.addEventListener('DOMContentLoaded', async () => {
+    // Load today's character for neural priming
+    try {
+      const mission = await AIRTABLE.getTodayMission();
+      if (mission?.fields?.['Today\'s Character']?.[0]) {
+        const char = await AIRTABLE.getCharacterById(mission.fields['Today\'s Character'][0]);
+        if (char) {
+          document.getElementById('primeCharName').textContent = char.fields['Character Name'];
+          document.getElementById('primeCharArchetype').textContent = char.fields['Archetype Title'];
+        }
+      }
+    } catch (e) {
+      console.error('Could not load character:', e);
+    }
+  });
+</script>
+</body>
+</html>
