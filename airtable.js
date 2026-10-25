@@ -1,13 +1,13 @@
 /* ============================================
-   FLUENCY LAB — AIRTABLE API MODULE
-   All database operations in one place
+   FLUENCY LAB — AIRTABLE MODULE
+   All DB calls proxy through Cloudflare Worker.
+   Zero API keys in this file. Zero keys in GitHub.
+
+   The Worker at WORKERS.BASE_URL (set in app.js)
+   holds AIRTABLE_PAT + AIRTABLE_BASE_ID as env vars.
    ============================================ */
 
 const AIRTABLE = {
-  BASE_ID: 'apprLWVXZQQUhip5o',        // Fluency Lab base (created Oct 2026)
-  API_KEY: 'YOUR_PAT_HERE',            // Get from: airtable.com/create/tokens — scope: data.records:read + data.records:write — add Fluency Lab base
-  BASE_URL: 'https://api.airtable.com/v0',
-
   // Table names — must match exactly in Airtable
   TABLES: {
     CHARACTERS:     'Characters',
@@ -18,52 +18,48 @@ const AIRTABLE = {
     MISSIONS:       'Daily Missions',
   },
 
-  // ─── CORE FETCH ───────────────────────────
+  // ─── CORE FETCH (via Worker proxy) ────────
+  // Calls GET /airtable/:table?...params
   async fetch(table, params = {}) {
-    const url = new URL(`${this.BASE_URL}/${this.BASE_ID}/${encodeURIComponent(table)}`);
+    const base = window.WORKERS?.BASE_URL;
+    if (!base) throw new Error('WORKERS.BASE_URL not set in app.js');
+
+    const url = new URL(`${base}/airtable/${encodeURIComponent(table)}`);
     Object.entries(params).forEach(([k, v]) => url.searchParams.append(k, v));
 
-    const res = await fetch(url, {
-      headers: {
-        'Authorization': `Bearer ${this.API_KEY}`,
-        'Content-Type': 'application/json',
-      }
-    });
-
-    if (!res.ok) throw new Error(`Airtable error: ${res.status} ${res.statusText}`);
+    const res = await window.fetch(url.toString());
+    if (!res.ok) throw new Error(`Airtable fetch error: ${res.status}`);
     return res.json();
   },
 
+  // Calls POST /airtable/:table
   async create(table, fields) {
-    const res = await fetch(`${this.BASE_URL}/${this.BASE_ID}/${encodeURIComponent(table)}`, {
+    const base = window.WORKERS?.BASE_URL;
+    const res = await window.fetch(`${base}/airtable/${encodeURIComponent(table)}`, {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${this.API_KEY}`,
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ fields }),
     });
     if (!res.ok) throw new Error(`Airtable create error: ${res.status}`);
     return res.json();
   },
 
+  // Calls PATCH /airtable/:table/:id
   async update(table, id, fields) {
-    const res = await fetch(`${this.BASE_URL}/${this.BASE_ID}/${encodeURIComponent(table)}/${id}`, {
+    const base = window.WORKERS?.BASE_URL;
+    const res = await window.fetch(`${base}/airtable/${encodeURIComponent(table)}/${id}`, {
       method: 'PATCH',
-      headers: {
-        'Authorization': `Bearer ${this.API_KEY}`,
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ fields }),
     });
     if (!res.ok) throw new Error(`Airtable update error: ${res.status}`);
     return res.json();
   },
 
+  // Calls GET /airtable/:table/:id
   async getById(table, id) {
-    const res = await fetch(`${this.BASE_URL}/${this.BASE_ID}/${encodeURIComponent(table)}/${id}`, {
-      headers: { 'Authorization': `Bearer ${this.API_KEY}` }
-    });
+    const base = window.WORKERS?.BASE_URL;
+    const res = await window.fetch(`${base}/airtable/${encodeURIComponent(table)}/${id}`);
     if (!res.ok) throw new Error(`Airtable getById error: ${res.status}`);
     return res.json();
   },
@@ -121,7 +117,6 @@ const AIRTABLE = {
   },
 
   async incrementPhraseCount(id, field = 'Practice Count') {
-    // First get current count
     const record = await this.getById(this.TABLES.PHRASES, id);
     const current = record.fields[field] || 0;
     return this.update(this.TABLES.PHRASES, id, { [field]: current + 1 });
@@ -266,25 +261,6 @@ const AIRTABLE = {
     if (h < 12) return 'Morning';
     if (h < 17) return 'Midday';
     return 'Evening';
-  },
-
-  // Upload audio file to Airtable attachment field
-  async uploadAudio(table, recordId, field, blob, filename) {
-    // Airtable doesn't support direct binary upload via REST
-    // Use Cloudflare Worker to handle upload → get URL → patch Airtable
-    const formData = new FormData();
-    formData.append('audio', blob, filename);
-    formData.append('recordId', recordId);
-    formData.append('table', table);
-    formData.append('field', field);
-
-    const res = await fetch('/workers/upload-audio', {
-      method: 'POST',
-      body: formData,
-    });
-
-    if (!res.ok) throw new Error('Audio upload failed');
-    return res.json();
   },
 };
 

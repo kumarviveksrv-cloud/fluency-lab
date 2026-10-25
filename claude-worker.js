@@ -1,62 +1,129 @@
 /* ============================================
    FLUENCY LAB — CLOUDFLARE WORKER
-   Handles Claude API + Whisper API calls
+   Proxies: Claude API + Whisper API + Airtable API
    Deploy at: https://dash.cloudflare.com
 
    Routes:
-   POST /claude      → Claude analysis
-   POST /transcribe  → Whisper transcription
+   POST /claude           → Claude analysis
+   POST /transcribe       → Whisper transcription
+   GET  /airtable/:table  → Airtable list/query
+   POST /airtable/:table  → Airtable create record
+   PATCH /airtable/:table/:id → Airtable update record
+   GET  /airtable/:table/:id  → Airtable get by ID
+
+   Environment Variables (set in Cloudflare dashboard):
+   ANTHROPIC_API_KEY  — Claude API key
+   OPENAI_API_KEY     — OpenAI / Whisper key
+   AIRTABLE_PAT       — Airtable Personal Access Token
+   AIRTABLE_BASE_ID   — apprLWVXZQQUhip5o
    ============================================ */
+
+const CORS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, PATCH, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+};
 
 export default {
   async fetch(request, env, ctx) {
-    // CORS headers — update origin in production
-    const corsHeaders = {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
-    };
-
-    // Handle preflight
     if (request.method === 'OPTIONS') {
-      return new Response(null, { headers: corsHeaders });
+      return new Response(null, { headers: CORS });
     }
 
     const url = new URL(request.url);
+    const path = url.pathname;
 
     try {
-      // ─── CLAUDE ROUTE ─────────────────────
-      if (url.pathname === '/claude' && request.method === 'POST') {
-        return handleClaude(request, env, corsHeaders);
+      // ─── CLAUDE ───────────────────────────
+      if (path === '/claude' && request.method === 'POST') {
+        return handleClaude(request, env);
       }
 
-      // ─── WHISPER ROUTE ────────────────────
-      if (url.pathname === '/transcribe' && request.method === 'POST') {
-        return handleWhisper(request, env, corsHeaders);
+      // ─── WHISPER ──────────────────────────
+      if (path === '/transcribe' && request.method === 'POST') {
+        return handleWhisper(request, env);
       }
 
-      return new Response('Not found', { status: 404, headers: corsHeaders });
+      // ─── AIRTABLE PROXY ───────────────────
+      // GET  /airtable/:table
+      // POST /airtable/:table
+      // GET  /airtable/:table/:id
+      // PATCH /airtable/:table/:id
+      if (path.startsWith('/airtable')) {
+        return handleAirtable(request, env, url);
+      }
+
+      return json({ error: 'Not found' }, 404);
 
     } catch (err) {
       console.error('Worker error:', err);
-      return new Response(
-        JSON.stringify({ error: err.message }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return json({ error: err.message }, 500);
     }
   }
 };
 
-// ─── CLAUDE HANDLER ───────────────────────────
-async function handleClaude(request, env, corsHeaders) {
+// ─── HELPERS ────────────────────────────────
+function json(data, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { ...CORS, 'Content-Type': 'application/json' },
+  });
+}
+
+// ─── AIRTABLE HANDLER ───────────────────────
+async function handleAirtable(request, env, url) {
+  // Parse: /airtable/:table  or  /airtable/:table/:id
+  const parts = url.pathname.replace('/airtable/', '').split('/');
+  const table = decodeURIComponent(parts[0]);
+  const recordId = parts[1] || null;
+
+  if (!table) return json({ error: 'Table name required' }, 400);
+
+  const baseId = env.AIRTABLE_BASE_ID;
+  const pat = env.AIRTABLE_PAT;
+
+  if (!baseId || !pat) {
+    return json({ error: 'Airtable env vars not configured' }, 500);
+  }
+
+  const atHeaders = {
+    'Authorization': `Bearer ${pat}`,
+    'Content-Type': 'application/json',
+  };
+
+  // Build Airtable URL
+  let atUrl = `https://api.airtable.com/v0/${baseId}/${encodeURIComponent(table)}`;
+  if (recordId) atUrl += `/${recordId}`;
+
+  // Forward query params (filterByFormula, sort, maxRecords, etc.)
+  if (request.method === 'GET') {
+    const qp = url.searchParams.toString();
+    if (qp) atUrl += `?${qp}`;
+  }
+
+  // Build proxied request
+  let atInit = { method: request.method, headers: atHeaders };
+
+  if (request.method === 'POST' || request.method === 'PATCH') {
+    const body = await request.json();
+    atInit.body = JSON.stringify(body);
+  }
+
+  const atRes = await fetch(atUrl, atInit);
+  const data = await atRes.json();
+
+  if (!atRes.ok) {
+    return json({ error: 'Airtable error', detail: data }, atRes.status);
+  }
+
+  return json(data);
+}
+
+// ─── CLAUDE HANDLER ─────────────────────────
+async function handleClaude(request, env) {
   const { prompt, systemPrompt } = await request.json();
 
-  if (!prompt) {
-    return new Response(
-      JSON.stringify({ error: 'No prompt provided' }),
-      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
-  }
+  if (!prompt) return json({ error: 'No prompt provided' }, 400);
 
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -66,7 +133,7 @@ async function handleClaude(request, env, corsHeaders) {
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: 'claude-haiku-4-5-20251001', // Fastest + cheapest for session analysis
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 1024,
       system: systemPrompt || 'You are a speaking coach. Be concise and direct.',
       messages: [{ role: 'user', content: prompt }],
@@ -81,35 +148,24 @@ async function handleClaude(request, env, corsHeaders) {
   const data = await response.json();
   const text = data.content?.[0]?.text || '';
 
-  // Try to parse JSON response (for structured analysis)
   let parsed = null;
   try {
     const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
     parsed = JSON.parse(cleaned);
   } catch {
-    // Return as plain text if not JSON
     parsed = { text };
   }
 
-  return new Response(
-    JSON.stringify(parsed),
-    { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-  );
+  return json(parsed);
 }
 
-// ─── WHISPER HANDLER ──────────────────────────
-async function handleWhisper(request, env, corsHeaders) {
+// ─── WHISPER HANDLER ────────────────────────
+async function handleWhisper(request, env) {
   const formData = await request.formData();
   const audioFile = formData.get('audio');
 
-  if (!audioFile) {
-    return new Response(
-      JSON.stringify({ error: 'No audio file provided' }),
-      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
-  }
+  if (!audioFile) return json({ error: 'No audio file provided' }, 400);
 
-  // Build multipart form for OpenAI
   const whisperForm = new FormData();
   whisperForm.append('file', audioFile, 'recording.webm');
   whisperForm.append('model', 'whisper-1');
@@ -118,9 +174,7 @@ async function handleWhisper(request, env, corsHeaders) {
 
   const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
     method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${env.OPENAI_API_KEY}`,
-    },
+    headers: { 'Authorization': `Bearer ${env.OPENAI_API_KEY}` },
     body: whisperForm,
   });
 
@@ -130,11 +184,7 @@ async function handleWhisper(request, env, corsHeaders) {
   }
 
   const data = await response.json();
-
-  return new Response(
-    JSON.stringify({ text: data.text || '' }),
-    { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-  );
+  return json({ text: data.text || '' });
 }
 
 /* ─── DEPLOYMENT INSTRUCTIONS ──────────────────
@@ -142,16 +192,15 @@ async function handleWhisper(request, env, corsHeaders) {
 1. Go to: https://dash.cloudflare.com
 2. Workers & Pages → Create Application → Create Worker
 3. Name it: fluency-lab
-4. Paste this entire file
-5. Save & Deploy
+4. Paste this entire file → Save & Deploy
 
-6. Add Environment Variables (Settings → Variables):
-   ANTHROPIC_API_KEY = your_claude_api_key
-   OPENAI_API_KEY = your_openai_api_key
+5. Add Environment Variables (Settings → Variables & Secrets):
+   ANTHROPIC_API_KEY  = your Claude API key
+   OPENAI_API_KEY     = your OpenAI key (for Whisper)
+   AIRTABLE_PAT       = your Airtable Personal Access Token
+   AIRTABLE_BASE_ID   = apprLWVXZQQUhip5o
 
-7. Copy your worker URL (e.g. fluency-lab.yourname.workers.dev)
-8. Update WORKERS.BASE_URL in js/app.js
-
-That's it. Same pattern as your existing Virorah workers.
+6. Copy your worker URL (e.g. fluency-lab.yourname.workers.dev)
+7. Update WORKERS.BASE_URL in app.js with that URL
 
 ────────────────────────────────────────────── */
