@@ -4,8 +4,8 @@
    ============================================ */
 
 const AIRTABLE = {
-  BASE_ID: 'YOUR_BASE_ID_HERE',       // e.g. appske9dqtgzRHbYe
-  API_KEY: 'YOUR_API_KEY_HERE',        // e.g. patXXXXXXXXXXXXXX
+  BASE_ID: 'apprLWVXZQQUhip5o',        // Fluency Lab base (created Oct 2026)
+  API_KEY: 'YOUR_PAT_HERE',            // Get from: airtable.com/create/tokens — scope: data.records:read + data.records:write — add Fluency Lab base
   BASE_URL: 'https://api.airtable.com/v0',
 
   // Table names — must match exactly in Airtable
