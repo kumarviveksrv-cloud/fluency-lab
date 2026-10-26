@@ -400,6 +400,10 @@ function renderError(el) {
     <div class="empty-state" style="padding:4rem 0;">
       <div class="empty-icon">⚠️</div>
       <p class="body-md text-secondary mb-4">${SESSION.errorMsg || 'Something went wrong loading your session.'}</p>
+      ${SESSION.canRetry && SESSION.recordingBlob ? `
+        <button class="btn btn-primary mb-3" onclick="SESSION.canRetry = false; submitForAnalysis()">Retry analysis</button>
+        <button class="btn btn-secondary mb-3" onclick="SESSION.canRetry = false; SESSION.recordingBlob = null; setPhase('record')">Re-record</button>
+      ` : ''}
       <button class="btn btn-secondary" onclick="NAV.go('index.html')">Back to Home</button>
     </div>
   `;
@@ -528,13 +532,23 @@ async function submitForAnalysis() {
 
   try {
     // 1. Transcribe via Whisper worker
+    // Fail loudly: never score a placeholder. The recording stays in memory so Retry works.
     let transcript = '';
     try {
       const transcribeResult = await WORKERS.transcribeAudio(SESSION.recordingBlob);
-      transcript = transcribeResult.text || transcribeResult.transcript || '';
+      transcript = (transcribeResult.text || transcribeResult.transcript || '').trim();
     } catch (e) {
-      console.warn('Transcription failed, using placeholder:', e);
-      transcript = '[Transcription unavailable — audio recorded successfully]';
+      console.warn('Transcription failed:', e);
+      SESSION.errorMsg = 'Transcription failed, so nothing was scored or saved. Your recording is still here. Check your connection and retry.';
+      SESSION.canRetry = true;
+      setPhase('error');
+      return;
+    }
+    if (transcript.split(/\s+/).filter(Boolean).length < 5) {
+      SESSION.errorMsg = 'We could not hear enough speech to score. Nothing was saved. Re-record a bit closer to the mic, or retry.';
+      SESSION.canRetry = true;
+      setPhase('error');
+      return;
     }
     SESSION.transcript = transcript;
 
@@ -567,7 +581,15 @@ async function submitForAnalysis() {
       'Confidence Score': analysis.confidenceScore,
       'Coherence Score': analysis.coherenceScore,
       'Character Match %': analysis.characterMatch,
+      'Listener Understood': analysis.listenerUnderstood || '',
+      'One Thing Done Well': analysis.oneThinDoneWell || '',
+      'One Micro Upgrade': analysis.oneMicroUpgrade || '',
       'Duration Minutes': duration ? parseFloat((duration / 60).toFixed(1)) : null,
+    }).then(() => {
+      // Mark today's mission as practiced
+      if (SESSION.mission?.id) {
+        AIRTABLE.update(AIRTABLE.TABLES.MISSIONS, SESSION.mission.id, { 'Session Completed?': true }).catch(() => {});
+      }
     }).catch(e => console.warn('Session save failed:', e));
 
     // 4. Increment phrase practice counts + auto-bump mastery for deployed phrases

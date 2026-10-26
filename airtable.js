@@ -239,9 +239,13 @@ const AIRTABLE = {
     const now = new Date();
     const weekAgo = new Date(now - 7 * 24 * 60 * 60 * 1000);
 
-    const thisWeekSessions = sessions.filter(s =>
-      new Date(s.fields['Date']) >= weekAgo
-    );
+    // Practice days this week: warm-up records don't count, and two sessions
+    // on one day count once, so the x/7 reads as days practiced.
+    const thisWeekSessions = [...new Set(
+      sessions
+        .filter(s => !s.fields['Morning Protocol Done?'] && new Date(s.fields['Date']) >= weekAgo)
+        .map(s => s.fields['Date'])
+    )];
 
     const masteredPhrases = phrases.filter(p =>
       ['Muscle Memory', 'Signature Move'].includes(p.fields['Mastery Level'])

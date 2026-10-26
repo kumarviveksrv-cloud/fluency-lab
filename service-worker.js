@@ -3,8 +3,8 @@
    Caches app shell for offline use
    ============================================ */
 
-const CACHE_NAME = 'fluency-lab-v5';
-const CACHE_VERSION = 5;
+const CACHE_NAME = 'fluency-lab-v6';
+const CACHE_VERSION = 6;
 
 // Files to cache on install (app shell)
 // Only cache files that actually exist — relative paths work on any subdirectory host
