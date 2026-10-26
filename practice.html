@@ -571,12 +571,14 @@ async function submitForAnalysis() {
     }).catch(e => console.warn('Session save failed:', e));
 
     // 4. Increment phrase practice counts + auto-bump mastery for deployed phrases
-    const deployedTexts = (analysis.phrasesDeployed || []).map(t => t.toLowerCase().trim());
+    // Strip punctuation for fuzzy matching (handles "I could be wrong but I'm not" vs "I could be wrong. But I'm not.")
+    const stripPunct = s => s.replace(/[.,!?;:'"]/g, '').replace(/\s+/g, ' ').trim();
+    const deployedTexts = (analysis.phrasesDeployed || []).map(t => stripPunct(t.toLowerCase()));
     SESSION.phrases.forEach(p => {
       AIRTABLE.incrementPhraseCount(p.id).catch(() => {});
 
       // Auto-bump mastery if this phrase was actually deployed
-      const phraseText = (p.fields['Phrase Text'] || '').toLowerCase().trim();
+      const phraseText = stripPunct((p.fields['Phrase Text'] || '').toLowerCase());
       const wasDeployed = deployedTexts.some(dt =>
         dt.includes(phraseText) || phraseText.includes(dt) || dt === phraseText
       );
