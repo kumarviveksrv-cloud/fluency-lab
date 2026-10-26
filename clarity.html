@@ -220,7 +220,8 @@ async function startMyWords() {
     return { word: r.fields['Word'], hindi: isHindi(r), chunks: g.chunks || '', sentence: g.sentence || '', tip: wordTip(r) };
   });
   let passage = (gen?.passage || '').trim();
-  if (english.length && (!passage || /[ऀ-ॿ]/.test(passage))) {
+  const leaksHindi = hindi.some(r => passage.toLowerCase().includes(String(r.fields['Word']).toLowerCase()));
+  if (english.length && (!passage || leaksHindi || /[ऀ-ॿ]/.test(passage))) {
     passage = english.map(r => `${r.fields['Word']}. I can say ${r.fields['Word']} clearly.`).join('\n');
   }
   const text = english.length ? passage : items.map(i => i.sentence || i.word).join('\n');
