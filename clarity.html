@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#0A0E1A">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>Clarity Lab · Fluency Lab</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="favicon.ico" type="image/x-icon">
+  <link rel="stylesheet" href="design-system.css">
+</head>
+<body>
+<div class="app-shell">
+
+  <header class="app-header">
+    <button class="btn-icon btn-secondary" id="backBtn" aria-label="Back">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+    </button>
+    <div class="header-title" id="headerTitle">Clarity Lab</div>
+    <div style="width:44px;"></div>
+  </header>
+
+  <main class="app-content" id="view"></main>
+
+  <div id="tabBar"></div>
+</div>
+
+<script src="app.js"></script>
+<script src="airtable.js"></script>
+<script src="audio.js"></script>
+<script src="clarity-content.js"></script>
+<script>
+/* ============================================
+   CLARITY LAB
+   Cork / pencil-in-teeth articulation drill.
+   Flow: pick set -> setup -> pass 1 (cork in) -> pass 2 (cork out) -> results
+   ============================================ */
+
+const S = {
+  set: null,        // active drill set
+  quick: false,     // short warm-up version
+  ret: null,        // page to return to after a quick drill
+  before: 5,
+  after: 5,
+  passes: { in: null, out: null },   // { blob, url, secs }
+  tr: null,         // { in, out } transcripts
+  trErr: false,
+  rec: false,
+  timer: null,
+  wordRecords: [],  // Struggle Words used in a My Words drill
+  back: null,
+};
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const view = (html) => { $('view').innerHTML = html; window.scrollTo(0, 0); };
+const setBack = (fn) => { S.back = fn; };
+const setTitle = (t) => { $('headerTitle').textContent = t; };
+
+let audioEl = null;
+function playUrl(url) {
+  if (audioEl) { audioEl.pause(); }
+  audioEl = new Audio(url);
+  audioEl.play().catch(() => TOAST.error('Could not play audio'));
+}
+
+// ─── SCORING (English, via Whisper transcript) ───────────
+const words = (s) => (s || '').toLowerCase().replace(/[^a-z0-9'\s]/g, ' ').replace(/\s+/g, ' ').trim().split(' ').filter(Boolean);
+
+function score(expectedText, transcript) {
+  const a = words(expectedText), b = words(transcript);
+  if (b.length < 5) return { pct: null, missed: [], heard: b.length };
+  const dp = Array.from({ length: a.length + 1 }, () => new Array(b.length + 1).fill(0));
+  for (let i = 1; i <= a.length; i++)
+    for (let j = 1; j <= b.length; j++)
+      dp[i][j] = a[i - 1] === b[j - 1] ? dp[i - 1][j - 1] + 1 : Math.max(dp[i - 1][j], dp[i][j - 1]);
+  const heardSet = new Set(b);
+  const missed = [...new Set(a.filter(w => w.length >= 5 && !heardSet.has(w)))].slice(0, 12);
+  return { pct: Math.round((dp[a.length][b.length] / a.length) * 100), missed, heard: b.length };
+}
+
+const wpm = (expectedText, secs) => secs > 3 ? Math.round(words(expectedText).length / (secs / 60)) : null;
+
+// ─── HOME ────────────────────────────────────
+async function renderHome() {
+  setTitle('Clarity Lab');
+  setBack(() => NAV.go('index.html'));
+  S.set = null; S.passes = { in: null, out: null }; S.tr = null; S.trErr = false; S.wordRecords = [];
+
+  view(`<div class="flex flex-col items-center justify-center gap-4" style="padding:3rem 0;"><div class="spinner"></div></div>`);
+  const [wordRecs, drills] = await Promise.all([
+    AIRTABLE.getStruggleWords().catch(() => null),
+    AIRTABLE.getRecentClarityDrills(3).catch(() => []),
+  ]);
+  S.allWords = wordRecs || [];
+
+  const wordCount = S.allWords.length;
+  const myWordsCard = `
+    <div class="list-item" id="mywordsItem">
+      <div style="width:40px;height:40px;border-radius:var(--radius-md);background:var(--amber-glow);display:flex;align-items:center;justify-content:center;font-size:20px;">⭐</div>
+      <div class="list-item-content">
+        <div class="list-item-title">My Words ${wordCount ? `<span class="badge badge-amber" style="margin-left:6px;">${wordCount}</span>` : ''}</div>
+        <div class="list-item-subtitle">${wordRecs === null ? 'Could not load your words' : wordCount ? 'A drill built from the words you reported' : 'Tap "+ Word" the moment you stumble on one'}</div>
+      </div>
+      <div class="list-item-right"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg></div>
+    </div>`;
+
+  const setCards = CLARITY.sets.map(s => `
+    <div class="list-item" data-set="${s.id}">
+      <div class="list-item-content">
+        <div class="list-item-title">${esc(s.name)} <span class="badge badge-muted" style="margin-left:6px;">${s.lang === 'hi' ? 'Hindi' : 'English'}</span></div>
+        <div class="list-item-subtitle">${esc(s.blurb)}</div>
+      </div>
+      <div class="list-item-right"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg></div>
+    </div>`).join('');
+
+  const recent = drills.length ? `
+    <section class="mt-6">
+      <div class="section-header"><span class="section-title">Recent drills</span></div>
+      <div class="card">
+        ${drills.map(d => {
+          const f = d.fields;
+          const parts = [];
+          if (f['Cork In Accuracy'] != null) parts.push(`cork in ${f['Cork In Accuracy']}%`);
+          if (f['Cork Out Accuracy'] != null) parts.push(`out ${f['Cork Out Accuracy']}%`);
+          if (f['Clarity Before'] != null && f['Clarity After'] != null) parts.push(`felt ${f['Clarity Before']} → ${f['Clarity After']}`);
+          return `<div class="body-sm" style="padding:6px 0;"><span class="text-secondary">${esc(f['Date'] || '')}</span> · ${esc(f['Drill Set'] || '')}<div class="body-xs text-muted">${esc(parts.join(' · '))}</div></div>`;
+        }).join('')}
+      </div>
+    </section>` : '';
+
+  const manage = wordCount ? `
+    <section class="mt-6">
+      <div class="section-header"><span class="section-title">My Words list</span></div>
+      <div class="card">
+        ${S.allWords.map(r => `
+          <div class="flex items-center justify-between" style="padding:6px 0;gap:8px;">
+            <div><span class="body-md">${esc(r.fields['Word'])}</span>
+              <span class="body-xs text-muted"> · ${esc(r.fields['Language'] || '')} · reported ${r.fields['Times Reported'] || 1}x · drilled ${r.fields['Times Drilled'] || 0}x</span></div>
+            <button class="btn btn-secondary btn-sm" data-conquer="${r.id}">Conquered</button>
+          </div>`).join('')}
+      </div>
+    </section>` : '';
+
+  view(`
+    <div class="card mb-4">
+      <div class="subheading mb-2">How the cork drill works</div>
+      <ul class="tip-list">${CLARITY.safety.map(t => `<li>${esc(t)}</li>`).join('')}</ul>
+      <p class="body-xs text-muted mt-3">Read once with the cork in, then again with it out. The cork forces big, deliberate mouth shapes; the second pass keeps that precision at normal size.</p>
+    </div>
+
+    <div class="section-header"><span class="section-title">Drills</span></div>
+    <div class="list">${myWordsCard}${setCards}</div>
+    ${recent}
+    ${manage}
+  `);
+
+  $('mywordsItem').addEventListener('click', startMyWords);
+  document.querySelectorAll('[data-set]').forEach(el => el.addEventListener('click', () => startSet(el.dataset.set)));
+  document.querySelectorAll('[data-conquer]').forEach(el => el.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    el.disabled = true;
+    try { await AIRTABLE.setWordStatus(el.dataset.conquer, 'Conquered'); TOAST.success('Marked conquered'); renderHome(); }
+    catch { el.disabled = false; TOAST.error('Could not update'); }
+  }));
+}
+
+// ─── START A SET ─────────────────────────────
+function startSet(id) {
+  S.set = CLARITY.sets.find(s => s.id === id);
+  S.wordRecords = [];
+  renderSetup();
+}
+
+async function startMyWords() {
+  if (!S.allWords || !S.allWords.length) {
+    TOAST.info('No words yet. Use the "+ Word" button when you stumble.');
+    return;
+  }
+  setTitle('My Words');
+  setBack(renderHome);
+  view(`<div class="flex flex-col items-center justify-center gap-4" style="padding:3rem 0;"><div class="spinner"></div><p class="body-sm text-muted">Building your drill…</p></div>`);
+
+  const recs = S.allWords.slice(0, 8);
+  S.wordRecords = recs;
+  const list = recs.map(r => `${r.fields['Word']} (${r.fields['Language'] || 'English'})`).join(', ');
+  const english = recs.filter(r => r.fields['Language'] !== 'Hindi');
+
+  let items = null, passage = '';
+  try {
+    const raw = await WORKERS.callClaude(
+      `A speaker struggles to pronounce these words clearly: ${list}.\n\nReturn JSON only:\n{"items":[{"word":"exact word as given","chunks":"syllables with the stressed one in CAPS, e.g. re-LAY-shun-ship (for Hindi use Roman Hindi chunks)","tip":"one short tip about mouth, tongue or lip movement","sentence":"one short natural spoken sentence using it (Hinglish for Hindi words)"}],"passage":"a natural spoken-style paragraph of 50 to 90 words that uses every ENGLISH word above at least once (empty string if there are none)"}`,
+      'You are a speech clarity coach. Respond with valid JSON only, no extra text.'
+    );
+    let parsed = raw;
+    if (raw?.content?.[0]?.text) { try { parsed = JSON.parse(raw.content[0].text); } catch {} }
+    if (Array.isArray(parsed?.items)) { items = parsed.items; passage = parsed.passage || ''; }
+  } catch (e) { console.warn('Word drill generation failed', e); }
+
+  if (!items) {
+    items = recs.map(r => ({ word: r.fields['Word'], chunks: r.fields['Word'], tip: 'Say it slowly three times with the cork in, then once at normal speed.', sentence: '' }));
+  }
+  if (!passage && english.length) {
+    passage = english.map(r => `${r.fields['Word']}. I can say ${r.fields['Word']} clearly.`).join('\n');
+  }
+  const text = english.length ? passage : items.map(i => i.sentence || i.word).join('\n');
+  const firstLines = text.split(/(?<=[.!?])\s+/).slice(0, 2).join(' ');
+
+  S.set = {
+    id: 'mywords', name: 'My Words', lang: english.length ? 'en' : 'hi', track: english.length > 0,
+    tips: ['Say each word slowly as separate beats, then as one smooth word.', 'Use the cork to over-shape the trouble spots.'],
+    items, text, quick: firstLines || text,
+  };
+  renderSetup();
+}
+
+// ─── SETUP ───────────────────────────────────
+function renderSetup() {
+  const s = S.set;
+  setTitle(s.name);
+  setBack(renderHome);
+  S.before = 5;
+
+  const wordList = s.words ? `
+    <div class="card mb-4">
+      <div class="subheading mb-3">Warm up on these first</div>
+      ${s.words.map(([w, c]) => `<div style="padding:4px 0;"><span class="body-md">${esc(w)}</span> <span class="chunks">${esc(c)}</span></div>`).join('')}
+    </div>` : '';
+
+  const items = s.items ? `
+    <div class="card mb-4">
+      <div class="subheading mb-3">Your words</div>
+      ${s.items.map(i => `
+        <div style="padding:8px 0;border-bottom:1px solid var(--navy-border);">
+          <div class="body-md">${esc(i.word)} <span class="chunks">${esc(i.chunks || '')}</span></div>
+          ${i.tip ? `<div class="body-xs text-secondary mt-1">${esc(i.tip)}</div>` : ''}
+          ${i.sentence ? `<div class="body-xs text-muted mt-1">"${esc(i.sentence)}"</div>` : ''}
+        </div>`).join('')}
+    </div>` : '';
+
+  view(`
+    <div class="session-title mb-2">${esc(s.name)}</div>
+    <p class="body-md text-secondary mb-4">${S.quick
+      ? 'Quick version: two short passes, cork in then cork out. About 2 minutes.'
+      : s.lang === 'hi' && !s.track
+        ? 'Hindi drill. You will hear yourself back and rate it, since transcription is English only.'
+        : 'Two passes: cork in, then cork out. We will score how many words came through clearly.'}</p>
+
+    <div class="card mb-4">
+      <div class="subheading mb-2">Mouth cues</div>
+      <ul class="tip-list">${s.tips.map(t => `<li>${esc(t)}</li>`).join('')}</ul>
+    </div>
+    ${wordList}${items}
+
+    <div class="cork-banner mb-4">Clean cork or pencil eraser end, held lightly between the front teeth. No sharp tips, no clenching.</div>
+
+    ${S.quick ? '' : `
+    <div class="card mb-4">
+      <div class="body-sm text-secondary mb-2">How clear does your speech feel right now?</div>
+      <div class="slider-wrap">
+        <input type="range" class="slider" id="beforeSlider" min="1" max="10" value="5">
+        <span class="slider-label" id="beforeVal">5</span>
+      </div>
+    </div>`}
+
+    <button class="btn btn-primary btn-lg" id="startBtn">Start: cork in →</button>
+  `);
+  $('beforeSlider')?.addEventListener('input', e => { S.before = parseInt(e.target.value); $('beforeVal').textContent = e.target.value; });
+  $('startBtn').addEventListener('click', () => renderPass('in'));
+}
+
+// ─── PASSES ──────────────────────────────────
+function passText() { return S.quick ? S.set.quick : S.set.text; }
+
+function renderPass(which) {
+  const isIn = which === 'in';
+  setTitle(isIn ? 'Pass 1 · Cork in' : 'Pass 2 · Cork out');
+  setBack(() => { stopRecIfAny(); renderSetup(); });
+
+  view(`
+    <div class="flex items-center justify-between mb-3">
+      <span class="session-step-label">${isIn ? 'Pass 1 of 2' : 'Pass 2 of 2'}</span>
+      <span class="badge ${isIn ? 'badge-amber' : 'badge-teal'}">${isIn ? 'Cork IN' : 'Cork OUT'}</span>
+    </div>
+    <div class="cork-banner mb-4">${isIn
+      ? 'Cork in. Open wide, over-shape every sound, slow and deliberate. Finish every word.'
+      : 'Cork out. Same words, same precision, natural pace. Do not rush.'}</div>
+
+    <div class="card mb-4"><div class="read-text">${esc(passText())}</div></div>
+
+    <div class="card mb-4">
+      <div class="flex flex-col items-center gap-3" style="padding:0.5rem 0;">
+        <button class="record-btn" id="recBtn" aria-label="Record">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>
+          </svg>
+        </button>
+        <div class="body-lg" id="timer" style="font-family:var(--font-mono);">00:00</div>
+        <p class="body-xs text-muted text-center" id="recHint">Tap to start reading, tap again to stop</p>
+      </div>
+    </div>
+
+    <div id="passDone" style="display:none;">
+      <div class="flex gap-3 mb-3">
+        <button class="btn btn-secondary" style="flex:1;" id="playBtn">▶ Play back</button>
+        <button class="btn btn-secondary" style="flex:1;" id="redoBtn">Re-record</button>
+      </div>
+      <button class="btn btn-primary btn-lg" id="nextBtn">${isIn ? 'Next: cork out →' : (S.quick ? 'Done →' : 'See results →')}</button>
+    </div>
+  `);
+
+  $('recBtn').addEventListener('click', () => toggleRec(which));
+}
+
+function stopRecIfAny() {
+  if (S.rec) { S.rec = false; AUDIO.stopRecording(); }
+  clearInterval(S.timer);
+}
+
+async function toggleRec(which) {
+  const btn = $('recBtn'), hint = $('recHint'), timer = $('timer');
+  if (S.rec) {
+    S.rec = false;
+    AUDIO.stopRecording();
+    hint.textContent = 'Processing…';
+    return;
+  }
+  S.rec = true;
+  btn.classList.add('recording');
+  hint.textContent = 'Recording… tap to stop';
+  $('passDone').style.display = 'none';
+  const t0 = Date.now();
+  clearInterval(S.timer);
+  S.timer = setInterval(() => { timer.textContent = AUDIO.formatTime(Math.floor((Date.now() - t0) / 1000)); }, 500);
+
+  const ok = await AUDIO.startRecording({
+    maxSeconds: 120,
+    onComplete: (blob) => {
+      S.rec = false;
+      clearInterval(S.timer);
+      const secs = (Date.now() - t0) / 1000;
+      S.passes[which] = { blob, url: AUDIO.createAudioURL(blob), secs };
+      if (!$('recBtn')) return; // navigated away
+      btn.classList.remove('recording');
+      hint.textContent = 'Saved. Play it back or move on.';
+      $('passDone').style.display = 'block';
+      $('playBtn').onclick = () => playUrl(S.passes[which].url);
+      $('redoBtn').onclick = () => renderPass(which);
+      $('nextBtn').onclick = () => which === 'in' ? renderPass('out') : finish();
+    },
+  });
+  if (!ok) {
+    S.rec = false;
+    clearInterval(S.timer);
+    btn.classList.remove('recording');
+    hint.textContent = 'Microphone access denied. Allow it in browser settings.';
+  }
+}
+
+// ─── FINISH ──────────────────────────────────
+async function finish() {
+  if (S.quick) {
+    setTitle('Done');
+    view(`
+      <div class="empty-state" style="padding:3rem 0;">
+        <div class="empty-icon">✅</div>
+        <p class="empty-title">Mouth warmed up</p>
+        <p class="empty-description">Two passes done. Carry that precision into the next step.</p>
+        <button class="btn btn-primary btn-lg mt-4" id="retBtn">Back to warm-up →</button>
+      </div>`);
+    $('retBtn').onclick = () => NAV.go(S.ret || 'index.html');
+    return;
+  }
+  if (!S.set.track) { renderResults(); return; }
+
+  setTitle('Analyzing');
+  view(`<div class="flex flex-col items-center justify-center gap-4" style="padding:3rem 0;"><div class="spinner"></div><p class="body-sm text-muted">Listening to both passes…</p></div>`);
+  S.trErr = false;
+  try {
+    const [a, b] = await Promise.all([
+      WORKERS.transcribeAudio(S.passes.in.blob),
+      WORKERS.transcribeAudio(S.passes.out.blob),
+    ]);
+    S.tr = { in: (a.text || '').trim(), out: (b.text || '').trim() };
+  } catch (e) {
+    console.warn('Transcription failed', e);
+    S.trErr = true;
+  }
+  renderResults();
+}
+
+function renderResults() {
+  setTitle('Results');
+  setBack(renderHome);
+  const s = S.set;
+  const tracked = s.track && !S.trErr && S.tr;
+  let inScore = null, outScore = null;
+  if (tracked) { inScore = score(s.text, S.tr.in); outScore = score(s.text, S.tr.out); }
+  S.after = S.before;
+
+  const pctCard = (label, sc, secs) => `
+    <div class="card" style="text-align:center;padding:var(--space-3);">
+      <div style="font-size:1.75rem;font-weight:700;color:${sc?.pct == null ? 'var(--text-muted)' : sc.pct >= 85 ? 'var(--teal)' : sc.pct >= 65 ? 'var(--amber)' : 'var(--rose)'};">${sc?.pct == null ? '–' : sc.pct + '%'}</div>
+      <div class="body-xs text-muted mt-1">${label}</div>
+      <div class="body-xs text-muted">${secs ? Math.round(secs) + 's' : ''}${wpm(s.text, secs) ? ' · ' + wpm(s.text, secs) + ' wpm' : ''}</div>
+    </div>`;
+
+  let verdict = '';
+  if (tracked) {
+    if (inScore.pct == null || outScore.pct == null) {
+      verdict = 'We could not hear enough clear speech in one of the passes to score it. Check the recording and try again closer to the mic.';
+    } else if (outScore.pct + 8 < inScore.pct) {
+      verdict = 'Precision dropped when the cork came out. Next time keep the same mouth shape, just smaller.';
+    } else if (outScore.pct >= inScore.pct) {
+      verdict = 'Your cork-out pass held up. The precision is carrying over.';
+    } else {
+      verdict = 'Close. A little slippage without the cork, which is normal. Repeat the passage once more.';
+    }
+    const pin = wpm(s.text, S.passes.in.secs), pout = wpm(s.text, S.passes.out.secs);
+    if (pin && pout && pout > pin * 1.35) verdict += ` You sped up about ${Math.round((pout / pin - 1) * 100)}% without the cork. Hold the pace.`;
+  }
+
+  const missed = tracked && outScore.missed.length ? `
+    <div class="card mb-4">
+      <div class="subheading mb-2">Words that did not come through (cork out)</div>
+      <p class="body-xs text-muted mb-3">Tap any word to add it to My Words.</p>
+      <div>${outScore.missed.map(w => `<span class="word-chip" data-miss="${esc(w)}">${esc(w)}</span>`).join('')}</div>
+    </div>` : '';
+
+  view(`
+    ${tracked ? `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-3);margin-bottom:var(--space-4);">
+        ${pctCard('Cork in', inScore, S.passes.in.secs)}
+        ${pctCard('Cork out', outScore, S.passes.out.secs)}
+      </div>
+      <div class="card mb-4"><p class="body-md" style="line-height:1.7;">${esc(verdict)}</p></div>
+      ${missed}
+      <p class="body-xs text-muted mb-4">Scores show how much of the text a transcription model caught. It forgives some mumbling, so use it as a trend line and trust your playback too.</p>
+    ` : `
+      <div class="card mb-4">
+        <p class="body-md" style="line-height:1.7;">${S.trErr
+          ? 'We could not transcribe the recordings, so there is no accuracy score this time. Nothing is faked: rate how it felt below.'
+          : 'Hindi drills are rated by ear. Play both passes back and compare the last syllable of each line.'}</p>
+        ${S.trErr ? `<button class="btn btn-secondary mt-3" id="retryTr">Retry transcription</button>` : ''}
+      </div>`}
+
+    <div class="flex gap-3 mb-4">
+      <button class="btn btn-secondary" style="flex:1;" id="pIn">▶ Cork in</button>
+      <button class="btn btn-secondary" style="flex:1;" id="pOut">▶ Cork out</button>
+    </div>
+
+    <div class="card mb-4">
+      <div class="body-sm text-secondary mb-2">How clear does your speech feel now? (was ${S.before})</div>
+      <div class="slider-wrap">
+        <input type="range" class="slider" id="afterSlider" min="1" max="10" value="${S.after}">
+        <span class="slider-label" id="afterVal">${S.after}</span>
+      </div>
+    </div>
+
+    <button class="btn btn-primary btn-lg mb-3" id="saveBtn">Save drill</button>
+    <button class="btn btn-secondary btn-lg" id="againBtn">Run again</button>
+  `);
+
+  $('pIn').onclick = () => playUrl(S.passes.in.url);
+  $('pOut').onclick = () => playUrl(S.passes.out.url);
+  $('afterSlider').addEventListener('input', e => { S.after = parseInt(e.target.value); $('afterVal').textContent = e.target.value; });
+  $('againBtn').onclick = () => { S.passes = { in: null, out: null }; S.tr = null; renderPass('in'); };
+  $('retryTr')?.addEventListener('click', finish);
+  document.querySelectorAll('[data-miss]').forEach(el => el.addEventListener('click', () => {
+    QUICKWORD.add(el.dataset.miss, 'English', `Missed in drill: ${s.name}`);
+    el.style.opacity = '0.4';
+  }));
+
+  $('saveBtn').onclick = async () => {
+    const btn = $('saveBtn');
+    btn.disabled = true; btn.textContent = 'Saving…';
+    const fields = { 'Drill Set': s.name, 'Clarity Before': S.before, 'Clarity After': S.after };
+    if (inScore?.pct != null) fields['Cork In Accuracy'] = inScore.pct;
+    if (outScore?.pct != null) fields['Cork Out Accuracy'] = outScore.pct;
+    try {
+      await AIRTABLE.logClarityDrill(fields);
+      if (S.wordRecords.length) AIRTABLE.markWordsDrilled(S.wordRecords);
+      STORE.updateStreak();
+      TOAST.success('Drill saved');
+      renderHome();
+    } catch (e) {
+      console.warn(e);
+      btn.disabled = false; btn.textContent = 'Save drill';
+      TOAST.error('Could not save. Check your connection and try again.');
+    }
+  };
+}
+
+// ─── BOOT ────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  $('tabBar').innerHTML = buildTabBar('clarity');
+  $('backBtn').addEventListener('click', () => { stopRecIfAny(); (S.back || (() => NAV.go('index.html')))(); });
+
+  const q = new URLSearchParams(location.search);
+  if (q.get('mode') === 'quick') {
+    S.quick = true;
+    const ret = q.get('return') || '';
+    S.ret = /^[a-z]+\.html$/.test(ret) ? ret : 'index.html';
+    const requested = CLARITY.sets.find(x => x.id === q.get('set'));
+    const day = Math.floor(Date.now() / 86400000);
+    S.set = requested || CLARITY.sets[day % CLARITY.sets.length];
+    $('tabBar').innerHTML = '';
+    setBack(() => NAV.go(S.ret));
+    renderSetup();
+  } else {
+    renderHome();
+  }
+});
+</script>
+</body>
+</html>

@@ -218,6 +218,44 @@ const AIRTABLE = {
     return data.records;
   },
 
+  // ─── STRUGGLE WORDS ───────────────────────
+  // Captured via the floating "+ Word" button (QUICKWORD in app.js).
+  async getStruggleWords() {
+    const data = await this.fetch('Struggle Words', {
+      'filterByFormula': `{Status} != "Conquered"`,
+      'sort[0][field]': 'Times Reported',
+      'sort[0][direction]': 'desc',
+    });
+    return data.records;
+  },
+
+  async setWordStatus(id, status) {
+    return this.update('Struggle Words', id, { 'Status': status });
+  },
+
+  async markWordsDrilled(records) {
+    await Promise.all(records.map(r =>
+      this.update('Struggle Words', r.id, { 'Times Drilled': (r.fields['Times Drilled'] || 0) + 1 })
+        .catch(() => {})
+    ));
+  },
+
+  // ─── CLARITY DRILLS ───────────────────────
+  async logClarityDrill(fields) {
+    const d = new Date();
+    const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    return this.create('Clarity Drills', { 'Date': today, ...fields });
+  },
+
+  async getRecentClarityDrills(limit = 5) {
+    const data = await this.fetch('Clarity Drills', {
+      'sort[0][field]': 'Drill ID',
+      'sort[0][direction]': 'desc',
+      'maxRecords': limit,
+    });
+    return data.records;
+  },
+
   // ─── PROGRESS DATA ────────────────────────
   async getProgressData() {
     // Fetch all three in parallel; if Sessions table doesn't exist yet, return empty array

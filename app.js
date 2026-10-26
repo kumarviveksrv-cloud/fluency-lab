@@ -273,6 +273,7 @@ function buildTabBar(activePage) {
     { id: 'today',      label: 'Today',      href: 'index.html',      icon: 'M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z' },
     { id: 'characters', label: 'Characters', href: 'characters.html', icon: 'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75' },
     { id: 'phrases',    label: 'Phrases',    href: 'phrases.html',    icon: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z' },
+    { id: 'clarity',    label: 'Clarity',    href: 'clarity.html',    icon: 'M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3zM19 10v2a7 7 0 0 1-14 0v-2M12 19v4' },
     { id: 'progress',   label: 'Progress',   href: 'progress.html',   icon: 'M18 20V10M12 20V4M6 20v-6' },
   ];
 
@@ -324,13 +325,158 @@ if ('serviceWorker' in navigator) {
   });
 }
 
+// ─── QUICK WORD CAPTURE ───────────────────────
+// A floating "+ Word" button on every page. Tap it the moment you stumble on a
+// word; it lands in the Struggle Words table and feeds the "My Words" drill.
+// Independent of airtable.js so it works on any page. Queues offline.
+const QUICKWORD = {
+  TABLE: 'Struggle Words',
+  QUEUE_KEY: 'pendingWords',
+
+  _esc(s) { return String(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"'); },
+  _today() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  },
+  _url(suffix = '') { return `${WORKERS.BASE_URL}/airtable/${encodeURIComponent(this.TABLE)}${suffix}`; },
+
+  guessLanguage(word) {
+    if (/[ऀ-ॿ]/.test(word)) return 'Hindi';
+    if (/\b(tha|thi|the|hai|hain|hota|hoti|karta|karti|raha|rahi)\s*$/i.test(word.trim())) return 'Hindi';
+    return 'English';
+  },
+
+  // Returns { word, count, isNew }. Throws on network failure.
+  async _save(word, language, context) {
+    const q = new URL(this._url());
+    q.searchParams.set('filterByFormula', `LOWER({Word}) = "${this._esc(word.toLowerCase())}"`);
+    q.searchParams.set('maxRecords', '1');
+    const found = await fetch(q.toString());
+    if (!found.ok) throw new Error('lookup failed');
+    const rec = (await found.json()).records?.[0];
+
+    if (rec) {
+      const count = (rec.fields['Times Reported'] || 0) + 1;
+      const res = await fetch(this._url(`/${rec.id}`), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fields: { 'Times Reported': count, 'Last Reported': this._today(), 'Status': 'Active' } }),
+      });
+      if (!res.ok) throw new Error('update failed');
+      return { word: rec.fields['Word'], count, isNew: false };
+    }
+
+    const fields = {
+      'Word': word, 'Language': language, 'Times Reported': 1, 'Times Drilled': 0,
+      'Status': 'Active', 'Last Reported': this._today(),
+    };
+    if (context) fields['Context'] = context;
+    const res = await fetch(this._url(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields }),
+    });
+    if (!res.ok) throw new Error('create failed');
+    return { word, count: 1, isNew: true };
+  },
+
+  // Public: save a word; queues it if offline. Never throws.
+  async add(word, language, context = '') {
+    word = (word || '').trim();
+    if (!word) return null;
+    language = language || this.guessLanguage(word);
+    try {
+      const r = await this._save(word, language, context);
+      TOAST.success(r.isNew ? `Saved "${r.word}" to My Words` : `"${r.word}" reported ${r.count}x`);
+      return r;
+    } catch (e) {
+      const q = STORE.get(this.QUEUE_KEY, []);
+      q.push({ word, language, context });
+      STORE.set(this.QUEUE_KEY, q);
+      TOAST.info(`Saved "${word}" offline, will sync`);
+      return null;
+    }
+  },
+
+  async flush() {
+    const q = STORE.get(this.QUEUE_KEY, []);
+    if (!q.length || !navigator.onLine) return;
+    const left = [];
+    for (const item of q) {
+      try { await this._save(item.word, item.language, item.context); }
+      catch { left.push(item); }
+    }
+    STORE.set(this.QUEUE_KEY, left);
+  },
+
+  init() {
+    if (document.getElementById('qwFab')) return;
+    const wrap = document.createElement('div');
+    wrap.className = 'qw-wrap';
+    wrap.innerHTML = `
+      <button class="qw-fab" id="qwFab" aria-label="Report a tricky word">+ Word</button>
+      <div class="qw-backdrop" id="qwBackdrop" hidden>
+        <div class="qw-sheet" role="dialog" aria-label="Report a tricky word">
+          <div class="qw-title">Caught a tricky word?</div>
+          <input class="input" id="qwWord" type="text" placeholder="Word or phrase, e.g. relationship, karta tha" autocomplete="off" autocapitalize="off" spellcheck="false">
+          <div class="qw-row">
+            <button class="chip active" data-lang="English">English</button>
+            <button class="chip" data-lang="Hindi">Hindi</button>
+          </div>
+          <input class="input" id="qwCtx" type="text" placeholder="Where it happened (optional)" autocomplete="off">
+          <div class="qw-row">
+            <button class="btn btn-secondary" id="qwCancel">Cancel</button>
+            <button class="btn btn-primary" id="qwSave">Save word</button>
+          </div>
+        </div>
+      </div>`;
+    document.body.appendChild(wrap);
+
+    const backdrop = wrap.querySelector('#qwBackdrop');
+    const wordEl = wrap.querySelector('#qwWord');
+    const ctxEl = wrap.querySelector('#qwCtx');
+    let lang = 'English';
+    let langTouched = false;
+
+    const setLang = (l) => {
+      lang = l;
+      wrap.querySelectorAll('[data-lang]').forEach(c => c.classList.toggle('active', c.dataset.lang === l));
+    };
+    const close = () => { backdrop.hidden = true; wordEl.value = ''; ctxEl.value = ''; langTouched = false; setLang('English'); };
+
+    wrap.querySelector('#qwFab').addEventListener('click', () => {
+      backdrop.hidden = false;
+      setTimeout(() => wordEl.focus(), 50);
+    });
+    wrap.querySelectorAll('[data-lang]').forEach(c =>
+      c.addEventListener('click', () => { langTouched = true; setLang(c.dataset.lang); }));
+    wordEl.addEventListener('input', () => { if (!langTouched) setLang(this.guessLanguage(wordEl.value)); });
+    wrap.querySelector('#qwCancel').addEventListener('click', close);
+    backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
+
+    const save = async () => {
+      const w = wordEl.value.trim();
+      if (!w) { wordEl.focus(); return; }
+      const c = ctxEl.value.trim();
+      close();
+      await this.add(w, lang, c);
+    };
+    wrap.querySelector('#qwSave').addEventListener('click', save);
+    [wordEl, ctxEl].forEach(el => el.addEventListener('keydown', e => { if (e.key === 'Enter') save(); }));
+
+    this.flush();
+  },
+};
+
 // ─── INIT ─────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   TOAST.init();
+  QUICKWORD.init();
 });
 
 // Make everything globally available
 window.NAV = NAV;
+window.QUICKWORD = QUICKWORD;
 window.TOAST = TOAST;
 window.STORE = STORE;
 window.WORKERS = WORKERS;

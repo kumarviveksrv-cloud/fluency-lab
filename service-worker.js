@@ -3,8 +3,8 @@
    Caches app shell for offline use
    ============================================ */
 
-const CACHE_NAME = 'fluency-lab-v7';
-const CACHE_VERSION = 7;
+const CACHE_NAME = 'fluency-lab-v8';
+const CACHE_VERSION = 8;
 
 // Files to cache on install (app shell)
 // Only cache files that actually exist — relative paths work on any subdirectory host
@@ -19,6 +19,8 @@ const APP_SHELL = [
   './phrase.html',
   './log.html',
   './progress.html',
+  './clarity.html',
+  './clarity-content.js',
   './manifest.json',
   './design-system.css',
   './app.js',

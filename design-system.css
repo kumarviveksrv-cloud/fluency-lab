@@ -230,11 +230,11 @@ input, textarea, select {
   flex-direction: column;
   align-items: center;
   gap: var(--space-1);
-  padding: var(--space-2) var(--space-4);
+  padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-md);
   transition: all var(--transition-fast);
   color: var(--text-muted);
-  min-width: 64px;
+  min-width: 56px;
 }
 
 .tab-item.active {
@@ -1220,3 +1220,57 @@ input, textarea, select {
     transition-duration: 0.01ms !important;
   }
 }
+
+
+/* ============================================
+   QUICK WORD CAPTURE (floating button + sheet)
+   ============================================ */
+.qw-wrap {
+  position: fixed; left: 50%; transform: translateX(-50%);
+  width: 100%; max-width: var(--content-max);
+  bottom: calc(var(--tab-bar-height) + var(--safe-bottom) + var(--space-3));
+  pointer-events: none; z-index: 150;
+}
+.qw-fab {
+  pointer-events: auto; float: right; margin-right: var(--space-4);
+  background: var(--navy-light); color: var(--teal);
+  border: 1px solid var(--teal-dim); border-radius: 999px;
+  padding: 10px 16px; font-family: var(--font-body); font-size: var(--text-sm); font-weight: 600;
+  box-shadow: 0 4px 18px rgba(0,0,0,0.45); opacity: 0.92; cursor: pointer;
+}
+.qw-fab:active { transform: scale(0.96); }
+.qw-backdrop {
+  pointer-events: auto; position: fixed; inset: 0; background: rgba(5,8,16,0.7);
+  display: flex; align-items: flex-end; justify-content: center; z-index: 300;
+}
+.qw-backdrop[hidden] { display: none; }
+.qw-sheet {
+  width: 100%; max-width: var(--content-max); background: var(--navy-mid);
+  border-top: 1px solid var(--navy-border); border-radius: 20px 20px 0 0;
+  padding: var(--space-5) var(--space-4) calc(var(--space-5) + var(--safe-bottom));
+  display: flex; flex-direction: column; gap: var(--space-3);
+}
+.qw-title { font-family: var(--font-display); font-size: var(--text-lg); font-weight: 700; }
+.qw-row { display: flex; gap: var(--space-2); }
+.qw-row .btn { flex: 1; }
+
+/* ============================================
+   CLARITY LAB
+   ============================================ */
+.read-text {
+  font-size: 1.2rem; line-height: 1.9; color: var(--text-primary);
+  letter-spacing: 0.01em; white-space: pre-line;
+}
+.cork-banner {
+  background: var(--amber-glow); border: 1px solid var(--amber-dim);
+  border-radius: var(--radius-md); padding: var(--space-3) var(--space-4);
+  color: var(--amber); font-size: var(--text-sm); line-height: 1.5;
+}
+.tip-list { margin: 0; padding-left: 1.1rem; color: var(--text-secondary); font-size: var(--text-sm); line-height: 1.7; }
+.word-chip {
+  display: inline-block; padding: 6px 12px; margin: 0 6px 8px 0; border-radius: 999px;
+  background: var(--navy-light); border: 1px solid var(--navy-border); color: var(--text-primary);
+  font-size: var(--text-sm); cursor: pointer;
+}
+.word-chip:active { border-color: var(--teal); }
+.chunks { font-family: var(--font-mono); color: var(--teal); font-size: var(--text-sm); }
