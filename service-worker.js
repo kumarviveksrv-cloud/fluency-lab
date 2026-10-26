@@ -7,22 +7,15 @@ const CACHE_NAME = 'fluency-lab-v1';
 const CACHE_VERSION = 1;
 
 // Files to cache on install (app shell)
+// Only cache files that actually exist — relative paths work on any subdirectory host
 const APP_SHELL = [
-  '/',
-  '/index.html',
-  '/warmup.html',
-  '/practice.html',
-  '/characters.html',
-  '/character.html',
-  '/phrases.html',
-  '/phrase.html',
-  '/log.html',
-  '/progress.html',
-  '/manifest.json',
-  '/css/design-system.css',
-  '/js/app.js',
-  '/js/airtable.js',
-  '/js/audio.js',
+  './',
+  './index.html',
+  './warmup.html',
+  './manifest.json',
+  './css/design-system.css',
+  './app.js',
+  './airtable.js',
 ];
 
 // ─── INSTALL ──────────────────────────────────
@@ -82,7 +75,7 @@ self.addEventListener('fetch', (event) => {
           .catch(() => {
             // Offline fallback for navigation requests
             if (request.mode === 'navigate') {
-              return caches.match('/index.html');
+              return caches.match('./index.html');
             }
           });
       })
