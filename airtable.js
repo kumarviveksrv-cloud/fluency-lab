@@ -205,10 +205,11 @@ const AIRTABLE = {
 
   // ─── PROGRESS DATA ────────────────────────
   async getProgressData() {
+    // Fetch all three in parallel; if Sessions table doesn't exist yet, return empty array
     const [sessions, characters, phrases] = await Promise.all([
-      this.getRecentSessions(30),
-      this.getCharacters(),
-      this.getPhrases(),
+      this.getRecentSessions(30).catch(() => []),
+      this.getCharacters().catch(() => []),
+      this.getPhrases().catch(() => []),
     ]);
 
     return {

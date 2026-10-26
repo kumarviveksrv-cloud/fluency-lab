@@ -263,6 +263,43 @@ function renderAnalyzing(el) {
   animateAnalysisBar();
 }
 
+// ── TRANSCRIPT ANNOTATION ──────────────────────
+// Wraps deployed phrases in the raw transcript with a highlight span.
+function annotateTranscript(transcript, deployedPhrases) {
+  if (!transcript) return 'No transcript available.';
+  if (!deployedPhrases || deployedPhrases.length === 0) return escapeHtml(transcript);
+
+  // Escape HTML entities in the plain transcript first
+  let annotated = escapeHtml(transcript);
+
+  // Sort phrases longest-first so overlapping matches don't break shorter ones
+  const sorted = [...deployedPhrases].sort((a, b) => b.length - a.length);
+
+  sorted.forEach(phrase => {
+    if (!phrase) return;
+    // Case-insensitive match
+    const escaped = escapeHtml(phrase);
+    const regex = new RegExp(escapeRegex(escaped), 'gi');
+    annotated = annotated.replace(regex, match =>
+      `<mark style="background:rgba(20,184,166,0.25);color:var(--teal);border-radius:3px;padding:1px 3px;">${match}</mark>`
+    );
+  });
+
+  return annotated;
+}
+
+function escapeHtml(str) {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function escapeRegex(str) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 // ── PHASE 5: RESULTS ───────────────────────────
 function renderResults(el) {
   document.getElementById('headerTitle').textContent = 'Session Results';
@@ -333,14 +370,15 @@ function renderResults(el) {
         <p class="body-sm" style="line-height:1.6;">${a.oneMicroUpgrade}</p>
       </div>
 
-      <!-- Transcript toggle -->
+      <!-- Transcript toggle (annotated) -->
       <details class="card mb-6" style="cursor:pointer;">
         <summary class="body-sm text-muted" style="list-style:none;display:flex;align-items:center;gap:8px;">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
           View transcript
+          ${a.phrasesDeployed?.length > 0 ? `<span style="margin-left:auto;font-size:10px;color:var(--teal);">✦ phrases highlighted</span>` : ''}
         </summary>
         <div class="body-sm text-secondary mt-3" style="line-height:1.7;border-top:1px solid var(--navy-border);padding-top:var(--space-3);">
-          ${SESSION.transcript || 'No transcript available.'}
+          ${annotateTranscript(SESSION.transcript, a.phrasesDeployed)}
         </div>
       </details>
 
@@ -529,12 +567,26 @@ async function submitForAnalysis() {
       'Confidence Score': analysis.confidenceScore,
       'Coherence Score': analysis.coherenceScore,
       'Character Match %': analysis.characterMatch,
-      'Duration (seconds)': duration,
+      'Duration Minutes': duration ? parseFloat((duration / 60).toFixed(1)) : null,
     }).catch(e => console.warn('Session save failed:', e));
 
-    // 4. Increment phrase practice counts (fire and forget)
+    // 4. Increment phrase practice counts + auto-bump mastery for deployed phrases
+    const deployedTexts = (analysis.phrasesDeployed || []).map(t => t.toLowerCase().trim());
     SESSION.phrases.forEach(p => {
       AIRTABLE.incrementPhraseCount(p.id).catch(() => {});
+
+      // Auto-bump mastery if this phrase was actually deployed
+      const phraseText = (p.fields['Phrase Text'] || '').toLowerCase().trim();
+      const wasDeployed = deployedTexts.some(dt =>
+        dt.includes(phraseText) || phraseText.includes(dt) || dt === phraseText
+      );
+      if (wasDeployed) {
+        const currentLevel = p.fields['Mastery Level'] || 'New';
+        const nextLevel = MASTERY.nextLevel(currentLevel);
+        if (nextLevel && nextLevel !== currentLevel) {
+          AIRTABLE.updatePhraseMastery(p.id, nextLevel).catch(() => {});
+        }
+      }
     });
 
     // 5. Update streak

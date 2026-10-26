@@ -361,15 +361,13 @@
     // Save to local storage
     STORE.setWarmupDone();
 
-    // Try to save to Airtable
+    // Save warm-up as a Practice Session record
     try {
-      const mission = await AIRTABLE.getTodayMission();
-      if (mission) {
-        await AIRTABLE.update('Practice Sessions', mission.id, {
-          'Tongue Tie Score (Before)': beforeScore,
-          'Tongue Tie Score (After)': afterScore,
-        });
-      }
+      await AIRTABLE.createSession({
+        'Tongue Tie Score (Before)': beforeScore,
+        'Tongue Tie Score (After)': afterScore,
+        'Morning Protocol Done?': true,
+      });
     } catch (e) {
       console.error('Could not save warm-up data:', e);
     }
