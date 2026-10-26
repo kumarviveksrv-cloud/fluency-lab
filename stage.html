@@ -371,7 +371,7 @@ function clap(seconds, ovation = false) {
   audio.applause(seconds);
   scene.trigger('clapStart');
   if (ovation) scene.trigger('standOvation');
-  setTimeout(() => scene.trigger('clapStop'), seconds * 1000 - 800);
+  setTimeout(() => { if (scene) scene.trigger('clapStop'); }, seconds * 1000 - 800);
 }
 
 // ─── LEVEL, ATTENTION, EVENTS ────────────────
