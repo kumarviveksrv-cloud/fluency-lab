@@ -13,7 +13,7 @@ const APP_SHELL = [
   './index.html',
   './warmup.html',
   './manifest.json',
-  './css/design-system.css',
+  './design-system.css',
   './app.js',
   './airtable.js',
 ];
