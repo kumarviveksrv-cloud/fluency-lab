@@ -342,6 +342,8 @@ async function toggleRec(which) {
   const btn = $('recBtn'), hint = $('recHint'), timer = $('timer');
   if (S.rec) {
     S.rec = false;
+    clearInterval(S.timer);
+    btn.classList.remove('recording');
     AUDIO.stopRecording();
     hint.textContent = 'Processing…';
     return;

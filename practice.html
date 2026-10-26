@@ -237,8 +237,7 @@ function renderRecord(el) {
     </div>
   `;
 
-  // Start timer
-  startTimer();
+  // Timer starts only when recording starts (see toggleRecording)
 }
 
 // ── PHASE 4: ANALYZING ─────────────────────────
@@ -304,9 +303,9 @@ function escapeRegex(str) {
 function renderResults(el) {
   document.getElementById('headerTitle').textContent = 'Session Results';
   const a = SESSION.analysis;
-  const duration = SESSION.startTime
-    ? Math.round((Date.now() - SESSION.startTime) / 1000)
-    : 0;
+  const duration = SESSION.recSecs
+    ? Math.round(SESSION.recSecs)
+    : (SESSION.startTime ? Math.round((Date.now() - SESSION.startTime) / 1000) : 0);
 
   const scoreColor = (n) => n >= 8 ? 'var(--teal)' : n >= 6 ? 'var(--amber)' : 'var(--rose)';
   const scoreLabel = (n) => n >= 8 ? 'Strong' : n >= 6 ? 'Solid' : 'Keep practicing';
@@ -438,23 +437,32 @@ async function toggleRecording() {
   const hint = document.getElementById('recordHint');
 
   if (isRecording) {
-    // Stop
+    // Stop: freeze the timer and flip the button back to idle right away
     isRecording = false;
+    stopTimer();
+    setRecordIcon(btn, false);
     btn.classList.remove('recording');
     hint.textContent = 'Processing…';
     AUDIO.stopRecording();
     return;
   }
 
-  // Start
+  // Start: the on-screen timer now shows the length of THIS recording
   isRecording = true;
+  setRecordIcon(btn, true);
   btn.classList.add('recording');
-  hint.textContent = 'Recording… tap to stop';
+  hint.textContent = 'Recording… tap the square to stop';
+  SESSION.recStart = Date.now();
+  startTimer();
 
   const started = await AUDIO.startRecording({
     maxSeconds: 120,
     onComplete: (blob) => {
+      // Also runs on the 2-minute auto-stop, so reset everything here too
       isRecording = false;
+      stopTimer();
+      SESSION.recSecs = (Date.now() - SESSION.recStart) / 1000;
+      setRecordIcon(btn, false);
       btn.classList.remove('recording');
       SESSION.recordingBlob = blob;
       SESSION.recordingURL = AUDIO.createAudioURL(blob);
@@ -464,9 +472,23 @@ async function toggleRecording() {
 
   if (!started) {
     isRecording = false;
+    stopTimer();
+    setRecordIcon(btn, false);
     btn.classList.remove('recording');
     hint.textContent = 'Microphone access denied. Please allow in browser settings.';
   }
+}
+
+// Mic icon when idle, stop square while recording
+function setRecordIcon(btn, recording) {
+  btn.innerHTML = recording
+    ? `<svg width="30" height="30" viewBox="0 0 24 24" fill="white"><rect x="5" y="5" width="14" height="14" rx="2"/></svg>`
+    : `<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+         <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+         <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+         <line x1="12" y1="19" x2="12" y2="23"/>
+         <line x1="8" y1="23" x2="16" y2="23"/>
+       </svg>`;
 }
 
 function showPlayback() {
@@ -478,9 +500,8 @@ function showPlayback() {
   if (playback) playback.style.display = 'block';
   if (submit) submit.style.display = 'block';
 
-  const dur = Math.round(SESSION.recordingBlob.size / 6000); // rough estimate
   const dEl = document.getElementById('audioDuration');
-  if (dEl) dEl.textContent = `~${dur}s`;
+  if (dEl) dEl.textContent = `${Math.round(SESSION.recSecs || 0)}s`;
 }
 
 function togglePlayback() {
@@ -570,9 +591,10 @@ async function submitForAnalysis() {
     SESSION.analysis = analysis;
 
     // 3. Save session to Airtable (fire and forget)
-    const duration = SESSION.startTime
-      ? Math.round((Date.now() - SESSION.startTime) / 1000)
-      : null;
+    // Length of the recording itself, not time spent on the screen
+    const duration = SESSION.recSecs
+      ? Math.round(SESSION.recSecs)
+      : (SESSION.startTime ? Math.round((Date.now() - SESSION.startTime) / 1000) : null);
 
     AIRTABLE.createSession({
       'Mission': SESSION.mission?.id ? [SESSION.mission.id] : [],
