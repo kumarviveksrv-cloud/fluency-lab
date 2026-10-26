@@ -889,11 +889,11 @@ P._monDraw = function () {
 
 P.render = function () {
   var s = this, g = s.ctx, W = s.W, H = s.H, d = s.d, t = s.t, L = s.L, i, j, p, k;
-  var swx = Math.sin(t * 0.6) * 0.8 + Math.sin(t * 0.37 + 1) * 0.25, swy = Math.sin(t * 0.5 + 1) * 0.7;
+  var q = 1 / d, swx = Math.round((Math.sin(t * 0.6) * 0.8 + Math.sin(t * 0.37 + 1) * 0.25) / q) * q, swy = Math.round((Math.sin(t * 0.5 + 1) * 0.7) / q) * q;
   var gl = s._gl; gl.n = 0;
   g.setTransform(d, 0, 0, d, 0, 0); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
   g.fillStyle = '#050408'; g.fillRect(0, 0, W, H);
-  g.drawImage(s.hallC, -4 + swx * 0.3, -4 + swy * 0.3, W + 8, s.hallH);
+  g.drawImage(s.hallC, -4 + Math.round(swx * 0.3 / q) * q, -4 + Math.round(swy * 0.3 / q) * q, W + 8, s.hallH);
   // back door (interior light + leaf)
   var dr = s.doorR, dv = s.door;
   if (dv > 0.01) {
@@ -906,7 +906,7 @@ P.render = function () {
   g.fillStyle = '#b8955e'; g.fillRect(dr.x + dr.w * (1 - 0.82 * dv) - 3, dr.y + dr.h * 0.55, 1.6, 1.6);
   // rows
   for (i = 0; i < NR; i++) {
-    var sh = 0.3 + 0.7 * s.rowS[i], ox = swx * sh, oy = swy * sh, stp = s.strips[i];
+    var sh = 0.3 + 0.7 * s.rowS[i], ox = Math.round(swx * sh / q) * q, oy = Math.round(swy * sh / q) * q, stp = s.strips[i];
     var sh2 = stp.c.height / d;
     g.drawImage(stp.c, -4 + ox, stp.top - 4 + oy, W + 8, sh2);
     var row = s.rowP[i];
@@ -952,7 +952,7 @@ P.render = function () {
   g.globalCompositeOperation = 'source-over'; g.globalAlpha = 1;
   g.drawImage(s.sp.exit, sg.x - sg.w / 2, sg.y - sg.h / 2, sg.w, sg.h);
   // dais
-  var dz = s.dz, ox2 = -swx * 1.6, oy2 = -swy * 1.6, vib = s.voice;
+  var dz = s.dz, ox2 = Math.round(-swx * 1.6 / q) * q, oy2 = Math.round(-swy * 1.6 / q) * q, vib = s.voice;
   g.drawImage(s.daisC, -4 + ox2, dz.y0 - 4 + oy2, W + 8, s.daisC.height / d);
   g.setTransform(d, 0, 0, d, d * ox2, d * oy2);
   s._monDraw();

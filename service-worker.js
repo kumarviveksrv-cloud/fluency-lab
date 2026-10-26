@@ -24,6 +24,7 @@ const APP_SHELL = [
   './stage.html',
   './stage-content.js',
   './stage-audio.js',
+  './stage-scene.js',
   './manifest.json',
   './design-system.css',
   './app.js',
