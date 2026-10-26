@@ -114,7 +114,7 @@ const STORE = {
 // ─── CLOUDFLARE WORKERS ───────────────────────
 const WORKERS = {
   // Base URL — update when you deploy workers
-  BASE_URL: 'https://fluency-lab.YOUR_SUBDOMAIN.workers.dev',
+  BASE_URL: 'https://fluency-lab.kumarvivek-srv.workers.dev',
 
   async callClaude(prompt, systemPrompt = '') {
     const res = await fetch(`${this.BASE_URL}/claude`, {
