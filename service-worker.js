@@ -3,8 +3,8 @@
    Caches app shell for offline use
    ============================================ */
 
-const CACHE_NAME = 'fluency-lab-v1';
-const CACHE_VERSION = 1;
+const CACHE_NAME = 'fluency-lab-v2';
+const CACHE_VERSION = 2;
 
 // Files to cache on install (app shell)
 // Only cache files that actually exist — relative paths work on any subdirectory host
@@ -12,10 +12,12 @@ const APP_SHELL = [
   './',
   './index.html',
   './warmup.html',
+  './practice.html',
   './manifest.json',
   './design-system.css',
   './app.js',
   './airtable.js',
+  './audio.js',
 ];
 
 // ─── INSTALL ──────────────────────────────────

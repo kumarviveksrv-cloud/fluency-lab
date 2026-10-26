@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#0A0E1A">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>Practice Session · Fluency Lab</title>
+  <link rel="icon" href="favicon.ico" type="image/x-icon">
+  <link rel="stylesheet" href="design-system.css">
+</head>
+<body>
+<div class="app-shell">
+
+  <!-- HEADER -->
+  <header class="app-header">
+    <button class="btn-icon btn-secondary" id="backBtn" onclick="handleBack()">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="15 18 9 12 15 6"/>
+      </svg>
+    </button>
+    <div class="header-title" id="headerTitle">Practice Session</div>
+    <div style="width:44px;"></div>
+  </header>
+
+  <!-- CONTENT -->
+  <main class="app-content" id="mainContent">
+    <!-- Populated by JS based on phase -->
+  </main>
+
+</div>
+
+<script src="app.js"></script>
+<script src="airtable.js"></script>
+<script src="audio.js"></script>
+<script>
+// ─── SESSION STATE ──────────────────────────────
+const SESSION = {
+  phase: 'loading',   // loading | scenario | record | analyzing | results
+  mission: null,
+  character: null,
+  phrases: [],
+  situation: null,
+  scenario: null,
+  sessionId: null,
+  transcript: null,
+  analysis: null,
+  recordingBlob: null,
+  recordingURL: null,
+  startTime: null,
+};
+
+// ─── PHASE RENDERERS ────────────────────────────
+
+function setPhase(phase) {
+  SESSION.phase = phase;
+  const content = document.getElementById('mainContent');
+
+  switch (phase) {
+    case 'loading':    renderLoading(content); break;
+    case 'scenario':   renderScenario(content); break;
+    case 'record':     renderRecord(content); break;
+    case 'analyzing':  renderAnalyzing(content); break;
+    case 'results':    renderResults(content); break;
+    case 'error':      renderError(content); break;
+  }
+
+  window.scrollTo(0, 0);
+}
+
+// ── PHASE 1: LOADING ───────────────────────────
+function renderLoading(el) {
+  document.getElementById('headerTitle').textContent = 'Loading…';
+  el.innerHTML = `
+    <div class="flex flex-col items-center justify-center gap-4" style="padding:4rem 0;">
+      <div class="spinner"></div>
+      <p class="body-sm text-muted" id="loadingMsg">Loading your mission…</p>
+    </div>
+  `;
+}
+
+// ── PHASE 2: SCENARIO ──────────────────────────
+function renderScenario(el) {
+  document.getElementById('headerTitle').textContent = 'Your Scenario';
+  const s = SESSION.scenario;
+  const char = SESSION.character?.fields;
+  const phrases = SESSION.phrases;
+
+  el.innerHTML = `
+    <div class="fade-in">
+
+      <!-- Character Banner -->
+      <div class="card-teal mb-4">
+        <div class="flex items-center gap-3">
+          <div style="width:48px;height:48px;border-radius:var(--radius-md);background:var(--navy);display:flex;align-items:center;justify-content:center;font-size:26px;border:1px solid var(--navy-border);">🎭</div>
+          <div>
+            <div class="subheading">${char?.['Character Name'] || 'Patrick Jane'}</div>
+            <div class="body-xs text-muted">${char?.['Archetype Title'] || 'The Effortlessly Dangerous Charmer'}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Scenario Card -->
+      <div class="card mb-4">
+        <div class="subheading mb-3" style="color:var(--teal);">The Setup</div>
+        <p class="body-md mb-4" style="line-height:1.7;">${s.setup}</p>
+
+        <div class="divider"></div>
+
+        <div class="flex gap-4 mt-3">
+          <div style="flex:1;">
+            <div class="body-xs text-muted mb-1">YOU ARE</div>
+            <div class="body-sm">${s.yourRole}</div>
+          </div>
+          <div style="flex:1;">
+            <div class="body-xs text-muted mb-1">THEY ARE</div>
+            <div class="body-sm">${s.theirRole}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Opening Line -->
+      <div class="card mb-4" style="border-color:var(--amber);border-width:1px;border-style:solid;">
+        <div class="body-xs text-muted mb-2">THEY OPEN WITH</div>
+        <p class="body-md" style="color:var(--amber);font-style:italic;line-height:1.6;">"${s.openingLine}"</p>
+      </div>
+
+      <!-- Phrases to Deploy -->
+      <div class="card mb-4">
+        <div class="subheading mb-3">Deploy at least one of these</div>
+        <div style="display:flex;flex-direction:column;gap:var(--space-2);">
+          ${phrases.map(p => `
+            <div style="display:flex;align-items:flex-start;gap:var(--space-2);padding:var(--space-2) 0;">
+              <div style="width:6px;height:6px;border-radius:50%;background:var(--teal);flex-shrink:0;margin-top:6px;"></div>
+              <div>
+                <div class="body-sm">"${p.fields['Phrase Text']}"</div>
+                <div class="body-xs text-muted">${p.fields['Category'] || ''}</div>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+
+      <!-- Win Condition -->
+      <div class="card-glass mb-6">
+        <div class="body-xs text-muted mb-1">WIN CONDITION</div>
+        <div class="body-sm">${s.winCondition}</div>
+      </div>
+
+      <!-- CTA -->
+      <button class="btn btn-primary btn-lg" onclick="setPhase('record')">
+        I'm ready — Start Recording →
+      </button>
+
+      <button class="btn btn-secondary btn-lg mt-3" onclick="regenScenario()" id="regenBtn">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:6px;">
+          <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+        </svg>
+        Generate a different scenario
+      </button>
+
+    </div>
+  `;
+}
+
+// ── PHASE 3: RECORD ────────────────────────────
+function renderRecord(el) {
+  document.getElementById('headerTitle').textContent = 'Your Response';
+  SESSION.startTime = Date.now();
+
+  el.innerHTML = `
+    <div class="fade-in">
+
+      <!-- Reminder -->
+      <div class="card-glass mb-4">
+        <div class="body-xs text-muted mb-2">THEY SAID</div>
+        <p class="body-sm" style="color:var(--amber);font-style:italic;">"${SESSION.scenario.openingLine}"</p>
+      </div>
+
+      <!-- Phrases quick ref -->
+      <div class="card mb-6">
+        <div class="body-xs text-muted mb-2">YOUR ARSENAL</div>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          ${SESSION.phrases.map(p => `
+            <div class="body-sm" style="color:var(--teal);">"${p.fields['Phrase Text']}"</div>
+          `).join('')}
+        </div>
+      </div>
+
+      <!-- Timer -->
+      <div class="flex justify-center mb-4">
+        <div id="timerDisplay" style="font-size:2.5rem;font-weight:700;font-variant-numeric:tabular-nums;color:var(--text-primary);letter-spacing:2px;">0:00</div>
+      </div>
+
+      <!-- Record Button -->
+      <div class="flex flex-col items-center gap-4 mb-6">
+        <button class="record-btn" id="recordBtn" onclick="toggleRecording()">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+            <line x1="12" y1="19" x2="12" y2="23"/>
+            <line x1="8" y1="23" x2="16" y2="23"/>
+          </svg>
+        </button>
+        <p class="body-sm text-muted" id="recordHint">Tap to start recording</p>
+      </div>
+
+      <!-- Playback (hidden until recording done) -->
+      <div id="playbackSection" style="display:none;" class="card mb-4">
+        <div class="subheading mb-3">Review your recording</div>
+        <div class="audio-player">
+          <button class="audio-play-btn" id="playbackBtn" onclick="togglePlayback()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          </button>
+          <div class="flex-1">
+            <div class="body-sm" id="playbackLabel">Your response</div>
+            <div class="audio-waveform mt-1"><div class="audio-progress" id="audioProgress" style="width:0%"></div></div>
+          </div>
+          <span class="audio-duration" id="audioDuration">—:——</span>
+        </div>
+      </div>
+
+      <!-- Submit (hidden until recording done) -->
+      <div id="submitSection" style="display:none;">
+        <button class="btn btn-primary btn-lg" onclick="submitForAnalysis()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:8px;">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          Analyze my response →
+        </button>
+        <button class="btn btn-secondary btn-lg mt-3" onclick="setPhase('record')">
+          Re-record
+        </button>
+      </div>
+
+    </div>
+  `;
+
+  // Start timer
+  startTimer();
+}
+
+// ── PHASE 4: ANALYZING ─────────────────────────
+function renderAnalyzing(el) {
+  document.getElementById('headerTitle').textContent = 'Analyzing…';
+  el.innerHTML = `
+    <div class="flex flex-col items-center justify-center gap-6" style="padding:4rem 1rem;">
+      <div class="spinner" style="width:48px;height:48px;border-width:3px;"></div>
+      <div style="text-align:center;">
+        <p class="body-md" id="analysisMsg">Transcribing your response…</p>
+        <p class="body-sm text-muted mt-2">This takes about 10 seconds</p>
+      </div>
+      <div style="width:100%;max-width:280px;">
+        <div style="height:4px;background:var(--navy-border);border-radius:2px;overflow:hidden;">
+          <div id="analysisBar" style="height:100%;background:var(--teal);border-radius:2px;width:0%;transition:width 0.5s ease;"></div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Animate progress bar
+  animateAnalysisBar();
+}
+
+// ── PHASE 5: RESULTS ───────────────────────────
+function renderResults(el) {
+  document.getElementById('headerTitle').textContent = 'Session Results';
+  const a = SESSION.analysis;
+  const duration = SESSION.startTime
+    ? Math.round((Date.now() - SESSION.startTime) / 1000)
+    : 0;
+
+  const scoreColor = (n) => n >= 8 ? 'var(--teal)' : n >= 6 ? 'var(--amber)' : 'var(--rose)';
+  const scoreLabel = (n) => n >= 8 ? 'Strong' : n >= 6 ? 'Solid' : 'Keep practicing';
+
+  el.innerHTML = `
+    <div class="fade-in">
+
+      <!-- Score Cards -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--space-3);margin-bottom:var(--space-4);">
+        ${[
+          { label: 'Confidence', val: a.confidenceScore },
+          { label: 'Coherence',  val: a.coherenceScore },
+          { label: 'Character',  val: Math.round(a.characterMatch / 10) },
+        ].map(item => `
+          <div class="card" style="text-align:center;padding:var(--space-3);">
+            <div style="font-size:1.75rem;font-weight:700;color:${scoreColor(item.val)};">${item.val}</div>
+            <div class="body-xs text-muted mt-1">${item.label}</div>
+            <div class="body-xs mt-1" style="color:${scoreColor(item.val)};">${scoreLabel(item.val)}</div>
+          </div>
+        `).join('')}
+      </div>
+
+      <!-- Listener Understood -->
+      <div class="card mb-4">
+        <div class="body-xs text-muted mb-2">WHAT THEY HEARD</div>
+        <p class="body-md" style="line-height:1.7;">${a.listenerUnderstood}</p>
+      </div>
+
+      <!-- Phrases Deployed -->
+      ${a.phrasesDeployed?.length > 0 ? `
+        <div class="card mb-4" style="border-color:var(--teal);border-width:1px;border-style:solid;">
+          <div class="flex items-center gap-2 mb-3">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--teal)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+            <div class="body-xs" style="color:var(--teal);">PHRASES DEPLOYED</div>
+          </div>
+          ${a.phrasesDeployed.map(p => `
+            <div class="body-sm mb-1" style="color:var(--teal);">"${p}"</div>
+          `).join('')}
+        </div>
+      ` : `
+        <div class="card mb-4">
+          <div class="body-xs text-muted mb-2">PHRASES DEPLOYED</div>
+          <div class="body-sm text-secondary">None of the target phrases detected — try to work them in naturally.</div>
+        </div>
+      `}
+
+      <!-- Feedback -->
+      <div class="card mb-4">
+        <div class="flex items-center gap-2 mb-2">
+          <div style="width:8px;height:8px;border-radius:50%;background:var(--teal);flex-shrink:0;"></div>
+          <div class="body-xs text-muted">WHAT WORKED</div>
+        </div>
+        <p class="body-sm" style="line-height:1.6;">${a.oneThinDoneWell}</p>
+      </div>
+
+      <div class="card mb-6">
+        <div class="flex items-center gap-2 mb-2">
+          <div style="width:8px;height:8px;border-radius:50%;background:var(--amber);flex-shrink:0;"></div>
+          <div class="body-xs text-muted">ONE MICRO-UPGRADE</div>
+        </div>
+        <p class="body-sm" style="line-height:1.6;">${a.oneMicroUpgrade}</p>
+      </div>
+
+      <!-- Transcript toggle -->
+      <details class="card mb-6" style="cursor:pointer;">
+        <summary class="body-sm text-muted" style="list-style:none;display:flex;align-items:center;gap:8px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          View transcript
+        </summary>
+        <div class="body-sm text-secondary mt-3" style="line-height:1.7;border-top:1px solid var(--navy-border);padding-top:var(--space-3);">
+          ${SESSION.transcript || 'No transcript available.'}
+        </div>
+      </details>
+
+      <!-- Actions -->
+      <button class="btn btn-primary btn-lg" onclick="runAgain()">
+        Run Again →
+      </button>
+      <button class="btn btn-secondary btn-lg mt-3" onclick="NAV.go('index.html')">
+        Back to Home
+      </button>
+
+    </div>
+  `;
+}
+
+function renderError(el) {
+  document.getElementById('headerTitle').textContent = 'Error';
+  el.innerHTML = `
+    <div class="empty-state" style="padding:4rem 0;">
+      <div class="empty-icon">⚠️</div>
+      <p class="body-md text-secondary mb-4">${SESSION.errorMsg || 'Something went wrong loading your session.'}</p>
+      <button class="btn btn-secondary" onclick="NAV.go('index.html')">Back to Home</button>
+    </div>
+  `;
+}
+
+// ─── TIMER ──────────────────────────────────────
+let timerInterval = null;
+let timerSeconds = 0;
+
+function startTimer() {
+  timerSeconds = 0;
+  clearInterval(timerInterval);
+  timerInterval = setInterval(() => {
+    timerSeconds++;
+    const m = Math.floor(timerSeconds / 60);
+    const s = timerSeconds % 60;
+    const el = document.getElementById('timerDisplay');
+    if (el) el.textContent = `${m}:${String(s).padStart(2, '0')}`;
+  }, 1000);
+}
+
+function stopTimer() {
+  clearInterval(timerInterval);
+}
+
+// ─── RECORDING ──────────────────────────────────
+let isRecording = false;
+let playbackAudio = null;
+
+async function toggleRecording() {
+  const btn = document.getElementById('recordBtn');
+  const hint = document.getElementById('recordHint');
+
+  if (isRecording) {
+    // Stop
+    isRecording = false;
+    btn.classList.remove('recording');
+    hint.textContent = 'Processing…';
+    AUDIO.stopRecording();
+    return;
+  }
+
+  // Start
+  isRecording = true;
+  btn.classList.add('recording');
+  hint.textContent = 'Recording… tap to stop';
+
+  const started = await AUDIO.startRecording({
+    maxSeconds: 120,
+    onComplete: (blob) => {
+      isRecording = false;
+      btn.classList.remove('recording');
+      SESSION.recordingBlob = blob;
+      SESSION.recordingURL = AUDIO.createAudioURL(blob);
+      showPlayback();
+    },
+  });
+
+  if (!started) {
+    isRecording = false;
+    btn.classList.remove('recording');
+    hint.textContent = 'Microphone access denied. Please allow in browser settings.';
+  }
+}
+
+function showPlayback() {
+  const hint = document.getElementById('recordHint');
+  const playback = document.getElementById('playbackSection');
+  const submit = document.getElementById('submitSection');
+
+  if (hint) hint.textContent = 'Recording saved — review below or re-record';
+  if (playback) playback.style.display = 'block';
+  if (submit) submit.style.display = 'block';
+
+  const dur = Math.round(SESSION.recordingBlob.size / 6000); // rough estimate
+  const dEl = document.getElementById('audioDuration');
+  if (dEl) dEl.textContent = `~${dur}s`;
+}
+
+function togglePlayback() {
+  if (!SESSION.recordingURL) return;
+  const btn = document.getElementById('playbackBtn');
+
+  if (playbackAudio && !playbackAudio.paused) {
+    playbackAudio.pause();
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
+    return;
+  }
+
+  playbackAudio = new Audio(SESSION.recordingURL);
+  playbackAudio.play();
+  btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
+
+  playbackAudio.onended = () => {
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
+  };
+}
+
+// ─── ANALYSIS ───────────────────────────────────
+function animateAnalysisBar() {
+  const bar = document.getElementById('analysisBar');
+  const msg = document.getElementById('analysisMsg');
+  if (!bar) return;
+
+  const steps = [
+    { width: '20%', msg: 'Transcribing your response…' },
+    { width: '50%', msg: 'Analyzing phrase deployment…' },
+    { width: '75%', msg: 'Scoring confidence and coherence…' },
+    { width: '90%', msg: 'Generating feedback…' },
+  ];
+
+  let i = 0;
+  const interval = setInterval(() => {
+    if (!document.getElementById('analysisBar')) { clearInterval(interval); return; }
+    if (i < steps.length) {
+      bar.style.width = steps[i].width;
+      if (msg) msg.textContent = steps[i].msg;
+      i++;
+    }
+  }, 2500);
+}
+
+async function submitForAnalysis() {
+  stopTimer();
+  setPhase('analyzing');
+
+  try {
+    // 1. Transcribe via Whisper worker
+    let transcript = '';
+    try {
+      const transcribeResult = await WORKERS.transcribeAudio(SESSION.recordingBlob);
+      transcript = transcribeResult.text || transcribeResult.transcript || '';
+    } catch (e) {
+      console.warn('Transcription failed, using placeholder:', e);
+      transcript = '[Transcription unavailable — audio recorded successfully]';
+    }
+    SESSION.transcript = transcript;
+
+    // 2. Analyze via Claude worker
+    const phraseTexts = SESSION.phrases.map(p => p.fields['Phrase Text']);
+    const charName = SESSION.character?.fields?.['Character Name'] || 'Patrick Jane';
+    const raw = await WORKERS.analyzeSession(transcript, phraseTexts, charName);
+
+    // Parse JSON — worker returns object or stringified JSON
+    let analysis = raw;
+    if (typeof raw === 'string') {
+      try { analysis = JSON.parse(raw); } catch { analysis = raw; }
+    }
+    // Handle nested: { content: [{text: '...'}] }
+    if (analysis?.content?.[0]?.text) {
+      try { analysis = JSON.parse(analysis.content[0].text); } catch {}
+    }
+
+    SESSION.analysis = analysis;
+
+    // 3. Save session to Airtable (fire and forget)
+    const duration = SESSION.startTime
+      ? Math.round((Date.now() - SESSION.startTime) / 1000)
+      : null;
+
+    AIRTABLE.createSession({
+      'Mission': SESSION.mission?.id ? [SESSION.mission.id] : [],
+      'Transcript': transcript,
+      'Phrases Deployed (Count)': analysis.phrasesDeployed?.length || 0,
+      'Confidence Score': analysis.confidenceScore,
+      'Coherence Score': analysis.coherenceScore,
+      'Character Match %': analysis.characterMatch,
+      'Duration (seconds)': duration,
+    }).catch(e => console.warn('Session save failed:', e));
+
+    // 4. Increment phrase practice counts (fire and forget)
+    SESSION.phrases.forEach(p => {
+      AIRTABLE.incrementPhraseCount(p.id).catch(() => {});
+    });
+
+    // 5. Update streak
+    STORE.updateStreak();
+
+    setPhase('results');
+
+  } catch (err) {
+    console.error('Analysis failed:', err);
+    SESSION.errorMsg = 'Analysis failed. Check your connection and try again.';
+    setPhase('error');
+  }
+}
+
+// ─── SCENARIO REGEN ─────────────────────────────
+async function regenScenario() {
+  const btn = document.getElementById('regenBtn');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Generating…';
+  }
+
+  try {
+    const sitName = SESSION.situation?.fields?.['Situation Name'] || 'Difficult Client Call';
+    const sitDiff = SESSION.situation?.fields?.['Difficulty Level'] || 'Medium';
+    const charName = SESSION.character?.fields?.['Character Name'] || 'Patrick Jane';
+
+    const raw = await WORKERS.generateScenario(sitName, charName, sitDiff);
+    let scenario = raw;
+    if (typeof raw === 'string') {
+      try { scenario = JSON.parse(raw); } catch {}
+    }
+    if (scenario?.content?.[0]?.text) {
+      try { scenario = JSON.parse(scenario.content[0].text); } catch {}
+    }
+
+    SESSION.scenario = scenario;
+    setPhase('scenario');
+  } catch (e) {
+    TOAST.error('Could not generate new scenario. Try again.');
+    if (btn) { btn.disabled = false; btn.textContent = 'Generate a different scenario'; }
+  }
+}
+
+// ─── RUN AGAIN ──────────────────────────────────
+function runAgain() {
+  SESSION.recordingBlob = null;
+  SESSION.recordingURL = null;
+  SESSION.transcript = null;
+  SESSION.analysis = null;
+  SESSION.startTime = null;
+  setPhase('scenario');
+}
+
+// ─── BACK HANDLER ───────────────────────────────
+function handleBack() {
+  if (['record', 'results'].includes(SESSION.phase)) {
+    if (!confirm('Leave this session? Your progress will not be saved.')) return;
+  }
+  NAV.back();
+}
+
+// ─── INIT ────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', async () => {
+  TOAST.init();
+  setPhase('loading');
+
+  const params = NAV.getParams();
+  const missionId = params.missionId;
+
+  try {
+    // Load mission
+    const msg = document.getElementById('loadingMsg');
+
+    if (msg) msg.textContent = 'Loading mission data…';
+    const mission = missionId
+      ? await AIRTABLE.getById('Daily Missions', missionId)
+      : await AIRTABLE.getTodayMission();
+
+    if (!mission) {
+      SESSION.errorMsg = 'No mission found for today. Set one up in Airtable first.';
+      setPhase('error');
+      return;
+    }
+
+    SESSION.mission = mission;
+    const f = mission.fields;
+
+    // Load character + phrases + situation in parallel
+    if (msg) msg.textContent = 'Loading character data…';
+    const [character, phrases, situation] = await Promise.all([
+      f['Today\'s Character']?.[0] ? AIRTABLE.getCharacterById(f['Today\'s Character'][0]) : null,
+      AIRTABLE.getTodayPhrases(),
+      f['Today\'s Situation']?.[0] ? AIRTABLE.getSituationById(f['Today\'s Situation'][0]) : null,
+    ]);
+
+    SESSION.character = character;
+    SESSION.phrases = phrases;
+    SESSION.situation = situation;
+
+    // Generate scenario via Claude
+    if (msg) msg.textContent = 'Generating your scenario…';
+    const sitName = situation?.fields?.['Situation Name'] || 'Difficult Client Call';
+    const sitDiff = situation?.fields?.['Difficulty Level'] || 'Medium';
+    const charName = character?.fields?.['Character Name'] || 'Patrick Jane';
+
+    const raw = await WORKERS.generateScenario(sitName, charName, sitDiff);
+    let scenario = raw;
+    if (typeof raw === 'string') {
+      try { scenario = JSON.parse(raw); } catch {}
+    }
+    if (scenario?.content?.[0]?.text) {
+      try { scenario = JSON.parse(scenario.content[0].text); } catch {}
+    }
+
+    SESSION.scenario = scenario;
+    setPhase('scenario');
+
+  } catch (err) {
+    console.error('Init failed:', err);
+    SESSION.errorMsg = 'Could not load session. Check your connection.';
+    setPhase('error');
+  }
+});
+</script>
+</body>
+</html>
