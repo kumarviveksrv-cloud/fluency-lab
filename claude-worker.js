@@ -36,12 +36,12 @@ export default {
     try {
       // ─── CLAUDE ───────────────────────────
       if (path === '/claude' && request.method === 'POST') {
-        return handleClaude(request, env);
+        return await handleClaude(request, env);
       }
 
       // ─── WHISPER ──────────────────────────
       if (path === '/transcribe' && request.method === 'POST') {
-        return handleWhisper(request, env);
+        return await handleWhisper(request, env);
       }
 
       // ─── AIRTABLE PROXY ───────────────────
@@ -50,7 +50,7 @@ export default {
       // GET  /airtable/:table/:id
       // PATCH /airtable/:table/:id
       if (path.startsWith('/airtable')) {
-        return handleAirtable(request, env, url);
+        return await handleAirtable(request, env, url);
       }
 
       return json({ error: 'Not found' }, 404);
