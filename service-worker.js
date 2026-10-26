@@ -3,8 +3,8 @@
    Caches app shell for offline use
    ============================================ */
 
-const CACHE_NAME = 'fluency-lab-v8';
-const CACHE_VERSION = 8;
+const CACHE_NAME = 'fluency-lab-v9';
+const CACHE_VERSION = 9;
 
 // Files to cache on install (app shell)
 // Only cache files that actually exist — relative paths work on any subdirectory host
@@ -66,29 +66,27 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Cache-first for app shell files
-  event.respondWith(
-    caches.match(request)
-      .then(cached => {
-        if (cached) return cached;
+  // Only handle GETs
+  if (request.method !== 'GET') return;
 
-        return fetch(request)
-          .then(response => {
-            // Cache valid responses
-            if (response && response.status === 200) {
-              const cloned = response.clone();
-              caches.open(CACHE_NAME)
-                .then(cache => cache.put(request, cloned));
-            }
-            return response;
-          })
-          .catch(() => {
-            // Offline fallback for navigation requests
-            if (request.mode === 'navigate') {
-              return caches.match('./index.html');
-            }
-          });
+  // Network-first for the app shell: a deploy shows up on the next load instead of
+  // the load after. The cache is the offline fallback only.
+  event.respondWith(
+    fetch(request, url.origin === self.location.origin ? { cache: 'no-cache' } : undefined)
+      .then(response => {
+        if (response && response.status === 200 && url.origin === self.location.origin) {
+          const cloned = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(request, cloned));
+        }
+        return response;
       })
+      .catch(() =>
+        caches.match(request).then(cached => {
+          if (cached) return cached;
+          if (request.mode === 'navigate') return caches.match('./index.html');
+          return Response.error();
+        })
+      )
   );
 });
 
