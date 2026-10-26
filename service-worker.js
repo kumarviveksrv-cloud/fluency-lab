@@ -3,7 +3,7 @@
    Caches app shell for offline use
    ============================================ */
 
-const CACHE_NAME = 'fluency-lab-v13';
+const CACHE_NAME = 'fluency-lab-v14';
 const CACHE_VERSION = 10;
 
 // Files to cache on install (app shell)

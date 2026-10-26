@@ -916,20 +916,34 @@ P._view = function () {
   return { k: k, sx0: (PH_W - W / k) / 2, sy0: PH_Y0 };
 };
 P._photoUpdate = function (dt) {
-  var s = this, A = s.att, t = s.t, tw;
-  if (s.mode === 'applause' || s.clapping) tw = { base: 0, bored: 0, engaged: 0, applause: 1 };
-  else {
-    var e = sstep(A, 0.55, 0.92) * (0.6 + 0.4 * (0.5 + 0.5 * Math.sin(t * 0.7 + 1)));
-    var b = sstep(A, 0.52, 0.12) * (0.65 + 0.35 * (0.5 + 0.5 * Math.sin(t * 0.5)));
-    if (s.mode === 'prep') { b = Math.max(b, 0.25 * s.L.chat); e = 0; }
-    if (s.mode === 'intro') { e = 0; b *= 0.5; }
-    tw = { base: Math.max(0.12, 1 - e - b), bored: b, engaged: e, applause: 0 };
+  var s = this, A = s.att, t = s.t, c, n, nm = ['base', 'bored', 'engaged', 'applause'];
+  var kk = 1 - Math.exp(-dt * (s.clapping || s.mode === 'applause' || s.pw.applause > 0.2 ? 3 : 1.1));
+  if (!s.pwz) { s.pwz = []; for (c = 0; c < 5; c++) s.pwz.push({ base: 1, bored: 0, engaged: 0, applause: 0 }); }
+  for (c = 0; c < 5; c++) {
+    // each part of the room drifts on its own: some people tune in earlier, some drift off
+    var Ac = clamp(A + 0.24 * Math.sin(t * 0.23 + c * 1.7) + 0.1 * Math.sin(t * 0.51 + c * 2.9), 0, 1), tw;
+    if (s.mode === 'applause' || s.clapping) tw = { base: 0, bored: 0, engaged: 0, applause: 1 };
+    else {
+      var e = sstep(Ac, 0.55, 0.92) * (0.6 + 0.4 * (0.5 + 0.5 * Math.sin(t * 0.7 + c)));
+      var b = sstep(Ac, 0.52, 0.12) * (0.65 + 0.35 * (0.5 + 0.5 * Math.sin(t * 0.5 + c * 2)));
+      if (s.mode === 'prep') { b = Math.max(b, 0.25 * s.L.chat); e = 0; }
+      if (s.mode === 'intro') { e = 0; b *= 0.5; }
+      tw = { base: Math.max(0.12, 1 - e - b), bored: b, engaged: e, applause: 0 };
+    }
+    for (n = 0; n < 4; n++) s.pwz[c][nm[n]] += (tw[nm[n]] - s.pwz[c][nm[n]]) * (kk * (0.8 + 0.2 * Math.sin(c * 3.1 + 1)));
   }
-  var k = 1 - Math.exp(-dt * (tw.applause > 0.5 || s.pw.applause > 0.2 ? 3 : 1.1)), n;
-  for (n in tw) s.pw[n] += (tw[n] - s.pw[n]) * k;
-  // ambient: a head tilts or someone shifts every couple of seconds
+  var tot = { base: 0, bored: 0, engaged: 0, applause: 0 };
+  for (c = 0; c < 5; c++) for (n = 0; n < 4; n++) tot[nm[n]] += s.pwz[c][nm[n]] / 5;
+  s.pw = tot;
+  // ambient life: heads tilt, people shift, nod along. More restless when attention is low.
   s._amb -= dt;
-  if (s._amb <= 0) { s._amb = 1.2 + Math.random() * 2.4; if (!s.clapping && s.mode !== 'applause') s._patch(0.06 + Math.random() * 0.88, Math.random() < 0.5 ? 'shift' : 'tilt'); }
+  if (s._amb <= 0) {
+    s._amb = (0.3 + Math.random() * 0.7) / (1 + 1.6 * (1 - A));
+    if (!s.clapping && s.mode !== 'applause') {
+      var r = Math.random(), kind = r < 0.35 ? 'tilt' : r < 0.65 ? 'shift' : (s.voice > 0.25 && A > 0.5 ? 'nod' : 'look');
+      s._patch(0.05 + Math.random() * 0.9, kind, 1.2 + Math.random() * 1.6);
+    }
+  }
   for (n = s.patches.length - 1; n >= 0; n--) { s.patches[n].u += dt / s.patches[n].dur; if (s.patches[n].u >= 1) s.patches.splice(n, 1); }
   for (n = s.glows.length - 1; n >= 0; n--) { s.glows[n].u += dt / s.glows[n].dur; if (s.glows[n].u >= 1) s.glows.splice(n, 1); }
   if (s._flash > 0) s._flash -= dt;
@@ -944,7 +958,7 @@ P._rowY = function () {
   var u = (Math.random() + Math.random()) / 2; return 130 + u * 440;
 };
 P._patch = function (x01, kind, dur, y) {
-  var s = this; if (!s.photo || s.patches.length > 16) return null;
+  var s = this; if (!s.photo || s.patches.length > 30) return null;
   var ix = x01 * PH_W, iy = y || s._rowY(), hr = 14 + (iy - 100) * 0.085;
   var pw = hr * 3.4, ph = hr * 4.0, v = s._view(), d = s.d;
   var c = mk(pw * v.k * d, ph * v.k * d), g = c.getContext('2d');
@@ -955,35 +969,57 @@ P._patch = function (x01, kind, dur, y) {
   var p = { c: c, ix: ix, iy: iy, hr: hr, pw: pw, ph: ph, kind: kind, u: 0, dur: dur || 1.6, dir: Math.random() < 0.5 ? -1 : 1 };
   s.patches.push(p); return p;
 };
+P._camOff = function (yc) {
+  // parallax: the speaker sways a little, near rows move more than far rows
+  var t = this.t, W = this.W, H = this.H, near = clamp(yc / (H * 0.8), 0, 1), nf = 0.2 + 0.8 * near;
+  var cam = (Math.sin(t * 0.37) * 2.4 + Math.sin(t * 0.83 + 1) * 1.0 + Math.sin(t * 0.13 + 2) * 1.6) * (W / 1000);
+  return { x: cam * nf, y: Math.sin(t * 1.15 + near * 2.2) * 0.7 * nf + Math.sin(t * 0.55 + near) * 0.5 * nf };
+};
 P._photoDraw = function (g, swx, swy) {
-  var s = this, ph = s.photo, v = s._view(), W = s.W, H = s.H, n, a, S;
-  var breath = 1 + 0.004 * Math.sin(s.t * 0.8) + (s.ovation ? 0.006 * Math.abs(Math.sin(s.t * 4)) : 0);
-  var k = v.k * breath, sw = W / k, sh = H / k;
-  var sx = clamp(v.sx0 + (PH_W - W / v.k) * 0 - (breath - 1) * 0 + swx * 0.3 / v.k, 0, PH_W - sw), sy = clamp(v.sy0 + swy * 0.3 / v.k, 0, PH_H - sh);
+  var s = this, ph = s.photo, v = s._view(), W = s.W, H = s.H, d = s.d, n, c, a, S, i;
   var order = ['base', 'bored', 'engaged', 'applause'];
-  S = s.pw.base;
-  g.globalAlpha = 1; g.drawImage(ph.base, sx, sy, sw, sh, 0, 0, W, H);
-  for (n = 1; n < 4; n++) {
-    var w = s.pw[order[n]]; if (w < 0.004) continue;
-    S += w; a = w / S; g.globalAlpha = a; g.drawImage(ph[order[n]], sx, sy, sw, sh, 0, 0, W, H);
+  var breath = 1.02 + 0.006 * Math.sin(s.t * 0.8) + (s.ovation ? 0.006 * Math.abs(Math.sin(s.t * 4)) : 0);
+  var mixKey = s.W + 'x' + s.H + ':' + s.d; s._mixDirty = (s._mixKey !== mixKey); s._mixKey = mixKey;
+  var k = v.k * breath, sw = W / k, sh = H / k;
+  var sx = clamp((PH_W - sw) / 2, 0, PH_W - sw), sy = clamp(v.sy0 + 6, 0, PH_H - sh);
+  // crowd mix, five columns that each react on their own
+  if (!s.mixC || s.mixC.width !== Math.round(W * d) || s.mixC.height !== Math.round(H * d)) { s.mixC = mk(W * d, H * d); s.mixG = s.mixC.getContext('2d'); }
+  var m = s.mixG, cw = sw / 5;
+  m.setTransform(d, 0, 0, d, 0, 0);
+  s._mixN = (s._mixN || 0) + 1;
+  if (s._mixN % 4 === 1 || s._mixDirty) for (c = 0; c < 5; c++) {
+    var w0 = s.pwz ? s.pwz[c] : s.pw, dx0 = c * W / 5, dw = W / 5 + 1;
+    S = w0.base; m.globalAlpha = 1; m.drawImage(ph.base, sx + c * cw, sy, cw + 0.4, sh, dx0, 0, dw, H);
+    for (n = 1; n < 4; n++) {
+      var w = w0[order[n]]; if (w < 0.004) continue;
+      S += w; m.globalAlpha = w / S; m.drawImage(ph[order[n]], sx + c * cw, sy, cw + 0.4, sh, dx0, 0, dw, H);
+    }
   }
+  m.globalAlpha = 1;
+  // depth strips with parallax
+  var NS = 12, sh2 = H / NS, mk1 = Math.round(sh2 * d);
   g.globalAlpha = 1;
+  for (i = 0; i < NS; i++) {
+    var o = s._camOff((i + 0.5) * sh2), y0 = i * sh2;
+    g.drawImage(s.mixC, 0, Math.floor(y0 * d), W * d, Math.ceil(sh2 * d) + 1, o.x, y0 + o.y, W, sh2 + 1 / d);
+  }
   s._vw = { k: k, sx: sx, sy: sy };
   // moving heads
   for (n = 0; n < s.patches.length; n++) {
     var p = s.patches[n], u = p.u, env = Math.sin(Math.PI * clamp(u, 0, 1)); env = Math.min(1, env * 2.2);
-    var dx = 0, dy = 0, rot = 0;
+    var dx = 0, dy = 0, rot = 0, hr = p.hr;
     switch (p.kind) {
-      case 'cough': dy = p.hr * 0.3 * Math.abs(Math.sin(u * Math.PI * 5)) * (1 - u * 0.5); rot = 0.04 * Math.sin(u * 30); break;
-      case 'clear': dy = p.hr * 0.16 * Math.abs(Math.sin(u * Math.PI * 3)); break;
-      case 'whisper': dx = p.dir * p.hr * 0.3 * env; rot = p.dir * 0.09 * env; break;
-      case 'shift': dx = p.dir * p.hr * 0.12 * Math.sin(u * Math.PI); dy = -p.hr * 0.08 * Math.sin(u * Math.PI); break;
-      case 'tilt': rot = p.dir * 0.06 * Math.sin(u * Math.PI); dy = p.hr * 0.04 * Math.sin(u * Math.PI); break;
-      case 'laugh': dy = -p.hr * 0.1 + p.hr * 0.12 * Math.abs(Math.sin(u * 30)); rot = 0.05 * Math.sin(u * 22); break;
-      case 'look': dx = p.dir * p.hr * 0.14 * env; rot = p.dir * 0.06 * env; break;
+      case 'cough': dy = hr * 0.5 * Math.abs(Math.sin(u * Math.PI * 5)) * (1 - u * 0.5); rot = 0.07 * Math.sin(u * 30); break;
+      case 'clear': dy = hr * 0.28 * Math.abs(Math.sin(u * Math.PI * 3)); break;
+      case 'whisper': dx = p.dir * hr * 0.5 * env; rot = p.dir * 0.14 * env; break;
+      case 'shift': dx = p.dir * hr * 0.2 * Math.sin(u * Math.PI); dy = -hr * 0.12 * Math.sin(u * Math.PI); break;
+      case 'tilt': rot = p.dir * 0.1 * Math.sin(u * Math.PI); dy = hr * 0.06 * Math.sin(u * Math.PI); break;
+      case 'nod': dy = hr * 0.22 * Math.abs(Math.sin(u * Math.PI * 2.5)); break;
+      case 'laugh': dy = -hr * 0.14 + hr * 0.2 * Math.abs(Math.sin(u * 30)); rot = 0.08 * Math.sin(u * 22); break;
+      case 'look': dx = p.dir * hr * 0.24 * env; rot = p.dir * 0.1 * env; break;
     }
-    var cx = (p.ix - sx) * k + dx * k, cy = (p.iy - sy) * k + dy * k;
-    g.save(); g.globalAlpha = env; g.translate(cx, cy); g.rotate(rot);
+    var cx = (p.ix - sx) * k, cy = (p.iy - sy) * k, co = s._camOff(cy);
+    g.save(); g.globalAlpha = env; g.translate(cx + co.x + dx * k, cy + co.y + dy * k); g.rotate(rot);
     g.drawImage(p.c, -p.pw * k / 2, -p.ph * k / 2, p.pw * k, p.ph * k); g.restore();
   }
   g.globalAlpha = 1;
@@ -997,6 +1033,8 @@ P._photoOverlays = function (g) {
     g.globalAlpha = fl * Math.min(1, (1 - q.u) * 4) * Math.min(1, q.u * 8);
     g.drawImage(s.sp.blue, cx - r, cy - r, r * 2, r * 2);
   }
+  var sh = 0.1 + 0.07 * Math.sin(s.t * 1.3) + 0.04 * Math.sin(s.t * 3.7 + 1), lx = [0.04, 0.49, 0.92], li;
+  for (li = 0; li < 3; li++) { g.globalAlpha = sh * (0.7 + 0.3 * Math.sin(s.t * 0.9 + li * 2)); g.drawImage(s.sp.warm, W * lx[li] - W * 0.12, -H * 0.05, W * 0.24, H * 0.3); }
   if (s._flash > 0) { g.globalAlpha = Math.min(1, s._flash) * 0.8; g.drawImage(s.sp.warm, W * 0.9, H * 0.05, W * 0.2, H * 0.4); }
   g.globalAlpha = 1;
 };
