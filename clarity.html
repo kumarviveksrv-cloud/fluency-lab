@@ -174,6 +174,17 @@ function startSet(id) {
   renderSetup();
 }
 
+// Static, safe coaching. Deliberately not model-generated.
+function wordTip(rec) {
+  const w = String(rec.fields['Word'] || '').trim().toLowerCase();
+  if (rec.fields['Language'] === 'Hindi') {
+    return /\b(tha|thi|the)$/.test(w)
+      ? 'Give the final "tha" the same energy as the verb: soft T with the tongue tip behind the top teeth, then a long "aa". Say only "tha" first, then add words backwards.'
+      : 'Say it slowly in separate beats, then smooth it out. Finish the last syllable fully.';
+  }
+  return 'Say it in separate beats with the cork in, stress the capital syllable, then say it once at normal speed. Finish the last sound.';
+}
+
 async function startMyWords() {
   if (!S.allWords || !S.allWords.length) {
     TOAST.info('No words yet. Use the "+ Word" button when you stumble.');
@@ -185,24 +196,31 @@ async function startMyWords() {
 
   const recs = S.allWords.slice(0, 8);
   S.wordRecords = recs;
-  const list = recs.map(r => `${r.fields['Word']} (${r.fields['Language'] || 'English'})`).join(', ');
-  const english = recs.filter(r => r.fields['Language'] !== 'Hindi');
+  const isHindi = (r) => r.fields['Language'] === 'Hindi';
+  const english = recs.filter(r => !isHindi(r));
+  const hindi = recs.filter(isHindi);
+  const fmt = (arr) => arr.map(r => `"${r.fields['Word']}"`).join(', ') || 'none';
 
-  let items = null, passage = '';
+  // Claude supplies only chunking, example sentences and the practice passage.
+  // Mouth-placement coaching is static (below) so it never invents wrong articulation advice.
+  let gen = null;
   try {
     const raw = await WORKERS.callClaude(
-      `A speaker struggles to pronounce these words clearly: ${list}.\n\nReturn JSON only:\n{"items":[{"word":"exact word as given","chunks":"syllables with the stressed one in CAPS, e.g. re-LAY-shun-ship (for Hindi use Roman Hindi chunks)","tip":"one short tip about mouth, tongue or lip movement","sentence":"one short natural spoken sentence using it (Hinglish for Hindi words)"}],"passage":"a natural spoken-style paragraph of 50 to 90 words that uses every ENGLISH word above at least once (empty string if there are none)"}`,
+      `English words a speaker struggles with: ${fmt(english)}.\nHindi phrases (Roman script) a speaker struggles with: ${fmt(hindi)}.\n\nReturn JSON only:\n{"items":[{"word":"exact word as given","chunks":"syllables with the stressed one in CAPS, e.g. re-LAY-shun-ship (for Hindi phrases, Roman Hindi syllables)","sentence":"one short natural spoken sentence using it. English words get an English sentence; Hindi phrases get a Roman-script Hindi sentence."}],"passage":"A natural spoken-style paragraph of 50 to 90 words written ENTIRELY in English, using every English word above at least once. Do not use any Hindi or Hinglish. Empty string if there are no English words."}`,
       'You are a speech clarity coach. Respond with valid JSON only, no extra text.'
     );
     let parsed = raw;
     if (raw?.content?.[0]?.text) { try { parsed = JSON.parse(raw.content[0].text); } catch {} }
-    if (Array.isArray(parsed?.items)) { items = parsed.items; passage = parsed.passage || ''; }
+    if (Array.isArray(parsed?.items)) gen = parsed;
   } catch (e) { console.warn('Word drill generation failed', e); }
 
-  if (!items) {
-    items = recs.map(r => ({ word: r.fields['Word'], chunks: r.fields['Word'], tip: 'Say it slowly three times with the cork in, then once at normal speed.', sentence: '' }));
-  }
-  if (!passage && english.length) {
+  const byWord = new Map((gen?.items || []).map(i => [String(i.word).toLowerCase(), i]));
+  const items = recs.map(r => {
+    const g = byWord.get(String(r.fields['Word']).toLowerCase()) || {};
+    return { word: r.fields['Word'], hindi: isHindi(r), chunks: g.chunks || '', sentence: g.sentence || '', tip: wordTip(r) };
+  });
+  let passage = (gen?.passage || '').trim();
+  if (english.length && (!passage || /[ऀ-ॿ]/.test(passage))) {
     passage = english.map(r => `${r.fields['Word']}. I can say ${r.fields['Word']} clearly.`).join('\n');
   }
   const text = english.length ? passage : items.map(i => i.sentence || i.word).join('\n');
