@@ -468,10 +468,67 @@ const QUICKWORD = {
   },
 };
 
+// ─── INSTALL NUDGE ────────────────────────────
+// Android/desktop Chrome fires beforeinstallprompt when the app is installable.
+// iOS Safari never does, so it gets a manual "Add to Home Screen" hint.
+// Renders into #installSlot (home screen only). Dismissal is remembered for 7 days.
+const INSTALL = {
+  deferred: null,
+
+  isStandalone() {
+    return window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  },
+  dismissed() { return Date.now() - STORE.get('installDismissed', 0) < 7 * 86400000; },
+
+  init() {
+    if (this.isStandalone()) return;
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      this.deferred = e;
+      this.render();
+    });
+    window.addEventListener('appinstalled', () => {
+      this.deferred = null;
+      document.getElementById('installCard')?.remove();
+      TOAST.success('Fluency Lab installed');
+    });
+    const ios = /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
+    if (ios) this.render(true);
+  },
+
+  render(ios = false) {
+    const slot = document.getElementById('installSlot');
+    if (!slot || this.dismissed() || document.getElementById('installCard')) return;
+    slot.innerHTML = `
+      <section class="card-teal mb-4 fade-in" id="installCard">
+        <div class="subheading mb-1">Install Fluency Lab</div>
+        <p class="body-sm text-secondary mb-3">${ios
+          ? 'Tap the Share button, then "Add to Home Screen" for one-tap practice.'
+          : 'Add it to your home screen for one-tap practice, full screen, and offline access.'}</p>
+        <div class="flex gap-3">
+          ${ios ? '' : '<button class="btn btn-primary" style="flex:1;" id="installBtn">Install</button>'}
+          <button class="btn btn-secondary" style="flex:1;" id="installLater">Not now</button>
+        </div>
+      </section>`;
+    document.getElementById('installBtn')?.addEventListener('click', async () => {
+      if (!this.deferred) return;
+      this.deferred.prompt();
+      await this.deferred.userChoice.catch(() => {});
+      this.deferred = null;
+      document.getElementById('installCard')?.remove();
+    });
+    document.getElementById('installLater').addEventListener('click', () => {
+      STORE.set('installDismissed', Date.now());
+      document.getElementById('installCard')?.remove();
+    });
+  },
+};
+
 // ─── INIT ─────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   TOAST.init();
   QUICKWORD.init();
+  INSTALL.init();
 });
 
 // Make everything globally available

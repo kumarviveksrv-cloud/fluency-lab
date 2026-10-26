@@ -3,8 +3,8 @@
    Caches app shell for offline use
    ============================================ */
 
-const CACHE_NAME = 'fluency-lab-v9';
-const CACHE_VERSION = 9;
+const CACHE_NAME = 'fluency-lab-v10';
+const CACHE_VERSION = 10;
 
 // Files to cache on install (app shell)
 // Only cache files that actually exist — relative paths work on any subdirectory host
@@ -95,15 +95,15 @@ self.addEventListener('push', (event) => {
   const data = event.data?.json() || {};
   self.registration.showNotification(data.title || 'Fluency Lab', {
     body: data.body || 'Time for your daily practice',
-    icon: '/assets/icons/icon-192.png',
-    badge: '/assets/icons/icon-192.png',
-    data: { url: data.url || '/' },
+    icon: './assets/icons/icon-192.png',
+    badge: './assets/icons/icon-192.png',
+    data: { url: data.url || './' },
   });
 });
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   event.waitUntil(
-    clients.openWindow(event.notification.data?.url || '/')
+    clients.openWindow(event.notification.data?.url || './')
   );
 });

@@ -2,7 +2,7 @@
   "name": "Fluency Lab",
   "short_name": "FluencyLab",
   "description": "Your personal voice transformation system",
-  "start_url": "/",
+  "start_url": "./index.html",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#0A0E1A",
@@ -13,31 +13,58 @@
       "src": "assets/icons/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
       "src": "assets/icons/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     }
   ],
   "screenshots": [],
-  "categories": ["education", "productivity"],
+  "categories": [
+    "education",
+    "productivity"
+  ],
   "shortcuts": [
     {
       "name": "Today's Session",
       "short_name": "Practice",
       "description": "Jump straight into today's session",
-      "url": "/practice.html",
-      "icons": [{ "src": "assets/icons/icon-192.png", "sizes": "192x192" }]
+      "url": "./practice.html",
+      "icons": [
+        {
+          "src": "assets/icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
     },
     {
       "name": "Log Conversation",
       "short_name": "Log",
       "description": "Log a real conversation",
-      "url": "/log.html",
-      "icons": [{ "src": "assets/icons/icon-192.png", "sizes": "192x192" }]
+      "url": "./log.html",
+      "icons": [
+        {
+          "src": "assets/icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Clarity Drill",
+      "short_name": "Clarity",
+      "description": "Cork / pencil clarity drill",
+      "url": "./clarity.html",
+      "icons": [
+        {
+          "src": "assets/icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
     }
-  ]
+  ],
+  "id": "./index.html",
+  "scope": "./"
 }
