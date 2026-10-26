@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#0A0E1A">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>Stage · Fluency Lab</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="favicon.ico" type="image/x-icon">
+  <link rel="stylesheet" href="design-system.css">
+  <style>
+    #stageRoot { position: fixed; inset: 0; background: #000; z-index: 500; touch-action: none; user-select: none; -webkit-user-select: none; }
+    #stageRoot[hidden] { display: none; }
+    #stageCanvas { width: 100%; height: 100%; display: block; }
+    .st-note {
+      position: absolute; left: 50%; top: 14px; transform: translateX(-50%);
+      max-width: 80%; text-align: center; padding: 8px 16px; border-radius: 999px;
+      background: rgba(10,14,26,0.72); color: #F0F4FF; font-size: 14px; line-height: 1.35;
+      backdrop-filter: blur(6px); opacity: 0; transition: opacity .4s; pointer-events: none;
+    }
+    .st-note.show { opacity: 1; }
+    .st-end {
+      position: absolute; left: 12px; top: 12px; width: 92px; height: 34px; border-radius: 999px; overflow: hidden;
+      background: rgba(10,14,26,0.6); border: 1px solid rgba(255,255,255,0.18); color: #cdd5ea; font-size: 11px;
+      display: flex; align-items: center; justify-content: center; letter-spacing: .02em;
+    }
+    .st-end .fill { position: absolute; inset: 0; width: 0%; background: rgba(255,77,109,0.55); }
+    .st-end span { position: relative; }
+    .st-done {
+      position: absolute; right: 12px; bottom: 12px; padding: 10px 18px; border-radius: 999px;
+      background: var(--teal); color: #0A0E1A; font-weight: 700; font-size: 14px; border: none;
+    }
+    .st-prep {
+      position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+      background: rgba(5,8,16,0.62); padding: 24px;
+    }
+    .st-prep[hidden] { display: none; }
+    .st-prep .box { max-width: 640px; text-align: center; color: #F0F4FF; }
+    .st-prep .tp { font-family: var(--font-display); font-size: clamp(20px, 4.4vw, 34px); font-weight: 700; line-height: 1.25; margin: 8px 0; }
+    .st-prep .tw { color: var(--amber); font-size: 15px; margin-top: 6px; }
+    .st-prep .cd { font-size: 44px; font-weight: 700; margin-top: 12px; font-variant-numeric: tabular-nums; color: var(--teal); }
+    #rotateHint {
+      display: none; position: absolute; inset: 0; background: rgba(5,8,16,0.92); color: #F0F4FF;
+      align-items: center; justify-content: center; text-align: center; padding: 30px; font-size: 18px; z-index: 5;
+    }
+    @media (orientation: portrait) { #rotateHint.armed { display: flex; } }
+    .topic-card { border-radius: var(--radius-lg); padding: var(--space-5); background: var(--navy-light); border: 1px solid var(--navy-border); }
+    .topic-text { font-family: var(--font-display); font-size: 1.45rem; font-weight: 700; line-height: 1.3; margin: 10px 0; }
+    .bars { display: flex; align-items: flex-end; gap: 6px; height: 90px; }
+    .bars div { flex: 1; background: var(--teal-dim); border-radius: 4px 4px 0 0; position: relative; min-width: 14px; }
+    .bars div span { position: absolute; top: -16px; left: 0; right: 0; text-align: center; font-size: 10px; color: var(--text-secondary); }
+    .stat-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: var(--space-3); }
+    .stat-grid .card { text-align: center; padding: var(--space-3); }
+    .stat-grid .n { font-size: 1.4rem; font-weight: 700; }
+    .coach p { margin: 0 0 12px; line-height: 1.6; }
+    .coach b { color: var(--teal); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; display: block; margin-bottom: 2px; }
+    details summary { cursor: pointer; color: var(--text-secondary); font-size: var(--text-sm); }
+    .transcript { white-space: pre-wrap; font-size: var(--text-sm); line-height: 1.7; color: var(--text-secondary); margin-top: 10px; }
+  </style>
+</head>
+<body>
+<div class="app-shell">
+  <header class="app-header">
+    <button class="btn-icon btn-secondary" id="backBtn" aria-label="Back">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+    </button>
+    <div class="header-title" id="headerTitle">Stage</div>
+    <div style="width:44px;"></div>
+  </header>
+  <main class="app-content" id="view"></main>
+  <div id="tabBar"></div>
+</div>
+
+<div id="stageRoot" hidden>
+  <canvas id="stageCanvas"></canvas>
+  <div class="st-note" id="stNote"></div>
+  <div class="st-end" id="stEnd"><div class="fill" id="stEndFill"></div><span>Hold to end</span></div>
+  <button class="st-done" id="stDone" hidden>Done answering</button>
+  <div class="st-prep" id="stPrep" hidden><div class="box" id="stPrepBox"></div></div>
+  <div id="rotateHint">Rotate your phone to landscape and rest it on a stand. The stage is built for a wide view.</div>
+</div>
+
+<script src="app.js"></script>
+<script src="airtable.js"></script>
+<script src="stage-content.js"></script>
+<script src="stage-audio.js"></script>
+<script src="stage-scene.js"></script>
+<script>
+/* ============================================
+   STAGE: topic generator + public speaking simulator
+   home -> prep -> host intro -> talk -> close -> (Q&A) -> review
+   ============================================ */
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`;
+const view = (h) => { $('view').innerHTML = h; window.scrollTo(0, 0); };
+
+const cfg = { topic: null, dur: 5, surprise: false, prep: 30 };   // prep: seconds, or 'impromptu'
+let backFn = () => NAV.go('index.html');
+let T = null;            // current talk
+let audio = null, scene = null, stream = null, analyser = null, rec = null, wakeLock = null;
+let loops = [];
+
+const MOOD_BASE = { supportive: 0.75, neutral: 0.55, tough: 0.38 };
+
+// ─── HOME / TOPIC GENERATOR ──────────────────
+function chip(label, active, attr) {
+  return `<button class="chip ${active ? 'active' : ''}" ${attr}>${label}</button>`;
+}
+
+function renderHome() {
+  $('headerTitle').textContent = 'Stage';
+  backFn = () => NAV.go('index.html');
+  if (!cfg.topic) cfg.topic = STAGE.pickTopic();
+  const t = cfg.topic;
+
+  view(`
+    <p class="body-md text-secondary mb-4">Speak to a room of 100. Topics are drawn at random from business, personal stories, abstract ideas and big questions, so you cannot prepare.</p>
+
+    <div class="topic-card mb-4">
+      <span class="badge badge-teal">${esc(t.genreLabel)}</span>
+      <div class="topic-text">${esc(t.topic)}</div>
+      ${t.twist ? `<div class="body-sm" style="color:var(--amber);">Challenge: ${esc(t.twist)}</div>` : ''}
+      <button class="btn btn-secondary btn-sm mt-3" id="shuffle">Shuffle topic</button>
+    </div>
+
+    <div class="card mb-4">
+      <div class="subheading mb-2">How long will you speak?</div>
+      <div class="chip-group" style="flex-wrap:wrap;">
+        ${STAGE.DURATIONS.map(d => chip(`${d} min`, !cfg.surprise && cfg.dur === d, `data-dur="${d}"`)).join('')}
+        ${chip('Surprise me', cfg.surprise, 'data-dur="surprise"')}
+      </div>
+      <div class="subheading mt-4 mb-2">Preparation</div>
+      <div class="chip-group" style="flex-wrap:wrap;">
+        ${chip('Impromptu', cfg.prep === 'impromptu', 'data-prep="impromptu"')}
+        ${chip('30 sec', cfg.prep === 30, 'data-prep="30"')}
+        ${chip('2 min', cfg.prep === 120, 'data-prep="120"')}
+      </div>
+      <p class="body-xs text-muted mt-3">${cfg.prep === 'impromptu'
+        ? 'Impromptu: you will only hear the topic when the host announces it. Ten seconds to breathe, then you are on.'
+        : 'You see the topic first, then the clock runs down while the room fills.'}</p>
+    </div>
+
+    <div class="card mb-4">
+      <div class="subheading mb-2">Before you walk on</div>
+      <ul class="tip-list">
+        <li>Prop your phone in landscape on a stand, at about eye level. Turn auto-rotate on.</li>
+        <li>Stand up if you can. Earphones in one ear make the room sound bigger without muffling your mic.</li>
+        <li>The clock never pauses. The room reacts to your voice, and some sessions the crowd is on your side, some not.</li>
+        <li>A real stage has no restart. Hold the End button for 1.5 seconds if you must leave early.</li>
+      </ul>
+    </div>
+
+    <button class="btn btn-primary btn-lg" id="walkOn">Walk on stage →</button>
+
+    <section class="mt-6" id="recent"></section>
+  `);
+
+  $('shuffle').onclick = () => { cfg.topic = STAGE.pickTopic(); renderHome(); };
+  document.querySelectorAll('[data-dur]').forEach(b => b.onclick = () => {
+    if (b.dataset.dur === 'surprise') cfg.surprise = true; else { cfg.surprise = false; cfg.dur = parseInt(b.dataset.dur); }
+    renderHome();
+  });
+  document.querySelectorAll('[data-prep]').forEach(b => b.onclick = () => {
+    cfg.prep = b.dataset.prep === 'impromptu' ? 'impromptu' : parseInt(b.dataset.prep);
+    renderHome();
+  });
+  $('walkOn').onclick = walkOn;
+  loadRecent();
+}
+
+async function loadRecent() {
+  try {
+    const d = await AIRTABLE.fetch('Stage Talks', { 'sort[0][field]': 'Date', 'sort[0][direction]': 'desc', 'maxRecords': 4 });
+    const el = $('recent');
+    if (!el || !d.records.length) return;
+    el.innerHTML = `<div class="section-header"><span class="section-title">Recent talks</span></div><div class="card">${
+      d.records.map(r => {
+        const f = r.fields;
+        return `<div style="padding:6px 0;"><div class="body-sm">${esc(f['Topic'] || '')}</div>
+          <div class="body-xs text-muted">${esc(f['Date'] || '')} · ${mmss(f['Actual Seconds'] || 0)} of ${f['Target Minutes'] || '?'} min · ${f['Words Per Minute'] || '?'} wpm · ${f['Filler Count'] ?? '?'} fillers</div></div>`;
+      }).join('')}</div>`;
+  } catch {}
+}
+
+// Keep a few AI-written topics in reserve so the bank never feels repetitive
+async function topUpTopics() {
+  if (STORE.get('stageFresh', []).length >= 4) return;
+  try {
+    const raw = await WORKERS.callClaude(
+      'Write 8 fresh, specific public speaking topics for an adult practising impromptu talks: two each for genres "pro" (workplace and leadership), "story" (personal experience prompts), "abstract" (odd thought-provoking questions) and "society" (big ideas and issues). Avoid cliches and avoid anything about stage fright. Return JSON only: {"topics":[{"t":"topic text under 14 words","g":"pro|story|abstract|society"}]}',
+      'You write sharp, varied speaking prompts. Respond with valid JSON only.');
+    const list = raw?.topics;
+    if (Array.isArray(list)) {
+      const ok = list.filter(x => x && typeof x.t === 'string' && x.t.length < 120);
+      STORE.set('stageFresh', [...STORE.get('stageFresh', []), ...ok].slice(0, 16));
+    }
+  } catch {}
+}
+
+// ─── STAGE HELPERS ───────────────────────────
+function note(text, ms = 4500) {
+  const n = $('stNote');
+  n.textContent = text; n.classList.add('show');
+  clearTimeout(note._t);
+  if (ms) note._t = setTimeout(() => n.classList.remove('show'), ms);
+}
+
+async function enterStage() {
+  const root = $('stageRoot');
+  root.hidden = false;
+  $('rotateHint').classList.add('armed');
+  history.pushState({ stage: 1 }, '');
+  try { await root.requestFullscreen({ navigationUI: 'hide' }); } catch {}
+  try { await screen.orientation.lock('landscape'); } catch {}
+  try { wakeLock = await navigator.wakeLock.request('screen'); } catch {}
+}
+
+function leaveStage() {
+  try { screen.orientation.unlock(); } catch {}
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  try { wakeLock && wakeLock.release(); } catch {}
+  wakeLock = null;
+  $('stageRoot').hidden = true;
+  $('rotateHint').classList.remove('armed');
+}
+
+function fitCanvas() {
+  const c = $('stageCanvas');
+  const w = window.innerWidth, h = window.innerHeight;
+  if (scene) scene.resize(w, h, window.devicePixelRatio || 1);
+}
+window.addEventListener('resize', () => { if (scene) fitCanvas(); });
+window.addEventListener('popstate', () => { if (T && !T.over) { history.pushState({ stage: 1 }, ''); note('Hold the End button to leave the stage.'); } });
+
+// Segment recorder: restarts every few minutes so each file is a valid, small clip
+class TalkRecorder {
+  constructor(stream, segMs = 240000) { this.stream = stream; this.segMs = segMs; this.segments = []; this.kind = 'talk'; }
+  start(kind) { this.kind = kind; this._begin(); }
+  _begin() {
+    const mime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus'].find(t => MediaRecorder.isTypeSupported(t)) || '';
+    const chunks = [], kind = this.kind, start = Date.now();
+    const r = new MediaRecorder(this.stream, mime ? { mimeType: mime, audioBitsPerSecond: 24000 } : { audioBitsPerSecond: 24000 });
+    this.rec = r;
+    r.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+    r.onstop = () => {
+      this.segments.push({ blob: new Blob(chunks, { type: mime || 'audio/webm' }), kind, start, end: Date.now() });
+      if (this._restart) { this._restart = false; this._begin(); }
+      else if (this._done) { const d = this._done; this._done = null; d(); }
+    };
+    r.start(1000);
+    clearTimeout(this.timer);
+    this.timer = setTimeout(() => { this._restart = true; if (r.state !== 'inactive') r.stop(); }, this.segMs);
+  }
+  stop() {
+    return new Promise((res) => {
+      clearTimeout(this.timer);
+      this._restart = false;
+      if (!this.rec || this.rec.state === 'inactive') { res(); return; }
+      this._done = res;
+      this.rec.stop();
+    });
+  }
+}
+
+function clearLoops() { loops.forEach(clearInterval); loops = []; }
+
+// ─── WALK ON ─────────────────────────────────
+async function walkOn() {
+  const total = (cfg.surprise ? STAGE.randomDuration() : cfg.dur) * 60;
+  T = {
+    topic: cfg.topic.topic, genre: cfg.topic.genreLabel, twist: cfg.topic.twist,
+    total, targetMin: total / 60,
+    mood: STAGE.MOODS[Math.floor(Math.random() * STAGE.MOODS.length)],
+    seed: Math.floor(Math.random() * 1e9),
+    impromptu: cfg.prep === 'impromptu',
+    phase: 'prep', over: false, reason: null,
+    speak: [], rms: [], attn: [], did: {}, lastDistraction: 0, lastLaugh: 0, lastClap: 0, lastAwkward: 0,
+    qa: null, interrupted: false,
+  };
+
+  // These need the tap gesture, so start them first
+  const fs = enterStage();
+  audio = new StageAudio();
+  try { await audio.init(); } catch { TOAST.error('Audio could not start.'); abortStage(); return; }
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: false } });
+  } catch {
+    TOAST.error('Microphone access is needed for the stage. Allow it and try again.');
+    abortStage(); return;
+  }
+  await fs;
+
+  const src = audio.ctx.createMediaStreamSource(stream);
+  analyser = audio.ctx.createAnalyser(); analyser.fftSize = 1024;
+  src.connect(analyser);
+  rec = new TalkRecorder(stream);
+
+  scene = new StageScene($('stageCanvas'), { mood: T.mood, seed: T.seed });
+  fitCanvas();
+  scene.setMode('prep');
+  scene.setMonitor({ elapsed: 0, total: T.total, label: 'READY', state: 'ok', topic: T.impromptu ? '' : T.topic });
+  scene.start();
+  audio.setCrowdLevel(0.55);
+
+  startLevelLoop();
+  document.addEventListener('visibilitychange', onVisibility);
+  bindEndHold();
+
+  try {
+    await runPrep();
+    await runIntro();
+    await runTalk();
+    await runClose();
+    if (T.qa) await runQA();
+  } catch (e) { console.error('Stage error', e); }
+  await finishStage();
+}
+
+function abortStage() {
+  clearLoops(); leaveStage();
+  try { audio && audio.close(); } catch {}
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  stream = null; T = null; scene && scene.stop(); scene = null;
+}
+
+// ─── PREP ────────────────────────────────────
+function runPrep() {
+  const secs = T.impromptu ? 10 : cfg.prep;
+  return new Promise((resolve) => {
+    const box = $('stPrepBox');
+    $('stPrep').hidden = false;
+    let left = secs;
+    const draw = () => {
+      box.innerHTML = T.impromptu
+        ? `<div class="body-md" style="opacity:.8">IMPROMPTU</div><div class="tp">The host will announce your topic.</div><div class="body-sm" style="opacity:.8">Breathe. Plant your feet. Whatever comes, begin with a sentence you can finish.</div><div class="cd">${left}</div>`
+        : `<div class="body-md" style="opacity:.8">${esc(cfg.topic.genreLabel).toUpperCase()} · ${T.targetMin} MIN</div><div class="tp">${esc(T.topic)}</div>${T.twist ? `<div class="tw">Challenge: ${esc(T.twist)}</div>` : ''}<div class="cd">${left}</div>`;
+      box.insertAdjacentHTML('beforeend', `<button class="btn btn-secondary btn-sm" id="skipPrep" style="margin-top:14px;">I am ready</button>`);
+      $('skipPrep').onclick = finish;
+    };
+    const finish = () => { clearInterval(iv); $('stPrep').hidden = true; resolve(); };
+    draw();
+    const iv = setInterval(() => { left--; if (left <= 0) finish(); else draw(); }, 1000);
+  });
+}
+
+// ─── HOST INTRO ──────────────────────────────
+async function runIntro() {
+  T.phase = 'intro';
+  scene.setMode('intro');
+  scene.setMonitor({ elapsed: 0, total: T.total, label: 'READY', state: 'ok', topic: T.topic });
+  audio.setCrowdLevel(0.38);
+  await sleep(1800);
+  audio.setCrowdLevel(0.12); scene.trigger('settle');
+  await sleep(900);
+  audio.setCrowdLevel(0.04);
+  await audio.speak(STAGE.introLine(T.topic, T.mood), { kind: 'host' });
+  clap(3.5);
+  await sleep(2600);
+  audio.gong();
+  scene.setMode('talk');
+  note(T.twist ? `Your time starts now. Challenge: ${T.twist}` : 'Your time starts now.', 6000);
+}
+
+function clap(seconds, ovation = false) {
+  audio.applause(seconds);
+  scene.trigger('clapStart');
+  if (ovation) scene.trigger('standOvation');
+  setTimeout(() => scene.trigger('clapStop'), seconds * 1000 - 800);
+}
+
+// ─── LEVEL, ATTENTION, EVENTS ────────────────
+const S = { rmsS: 0, floor: 0.01, silRun: 0, spkRun: 0, A: 0.5, recent: [], buf: null, speaking: false };
+
+function startLevelLoop() {
+  S.buf = new Float32Array(analyser.fftSize);
+  S.A = MOOD_BASE[T.mood];
+  S.floor = 0.01; S.recent = []; S.silRun = 0;
+  loops.push(setInterval(tick100, 100));
+}
+
+function tick100() {
+  if (!analyser) return;
+  analyser.getFloatTimeDomainData(S.buf);
+  let sum = 0;
+  for (let i = 0; i < S.buf.length; i++) sum += S.buf[i] * S.buf[i];
+  const rms = Math.sqrt(sum / S.buf.length);
+  S.rmsS = S.rmsS * 0.55 + rms * 0.45;
+  if (S.rmsS < S.floor) S.floor = S.rmsS * 0.5 + S.floor * 0.5; else S.floor += (S.rmsS - S.floor) * 0.0015;
+  const speaking = (T.phase === 'talk' || T.phase === 'qa') && S.rmsS > Math.max(0.02, S.floor * 2.6);
+  S.speaking = speaking;
+  scene && scene.setVoice(clamp((S.rmsS - S.floor) / 0.12));
+
+  if (T.phase !== 'talk' && T.phase !== 'qa') return;
+
+  if (T.phase === 'talk') { T.speak.push(speaking ? 1 : 0); T.rms.push(rms); }
+  S.recent.push(rms); if (S.recent.length > 60) S.recent.shift();
+  if (speaking) { S.silRun = 0; S.spkRun++; } else { S.silRun++; S.spkRun = 0; }
+
+  // How energetic have the last 6 seconds been (coefficient of variation of level)?
+  let cov = 0;
+  if (S.recent.length > 20) {
+    const m = S.recent.reduce((a, b) => a + b, 0) / S.recent.length;
+    const v = S.recent.reduce((a, b) => a + (b - m) * (b - m), 0) / S.recent.length;
+    cov = m > 0.005 ? Math.sqrt(v) / m : 0;
+  }
+  S.dyn = clamp((cov - 0.35) / 0.6);
+  const B = MOOD_BASE[T.mood];
+  if (speaking || S.silRun < 15) {
+    const target = clamp(B + 0.18 + 0.3 * S.dyn);
+    S.A += (target - S.A) * 0.012;
+  } else if (S.silRun >= 30) {
+    S.A -= 0.007;
+  }
+  S.A = clamp(S.A, 0.05, 1);
+  scene && scene.setAttention(S.A);
+}
+
+function monitorTick() {
+  if (!T || T.phase !== 'talk') return;
+  const el = (Date.now() - T.talkStart) / 1000;
+  const rem = T.total - el;
+  let label = el < T.total * 0.15 ? 'OPEN' : el < T.total * 0.85 ? 'BODY' : 'CLOSE';
+  if (T.total >= 300 && rem <= 120) label = 'WRAP UP';
+  const warn = T.total <= 60 ? 15 : 60, crit = T.total <= 60 ? 5 : 15;
+  const state = rem <= crit ? 'red' : rem <= warn ? 'amber' : 'ok';
+  scene.setMonitor({ elapsed: el, total: T.total, label, state, topic: T.topic });
+  if (rem <= 0) endTalk('time');
+}
+
+function pickDistraction() {
+  const r = Math.random();
+  const x = scene.pickX(), pan = x * 2 - 1;
+  if (r < 0.34) { audio.cough(pan); scene.trigger('cough', { x }); }
+  else if (r < 0.44) { audio.throatClear(pan); scene.trigger('throatClear', { x }); }
+  else if (r < 0.58) { audio.chair(pan); scene.trigger('shift', { x }); }
+  else if (r < 0.68) { audio.phoneBuzz(pan); scene.trigger('phone', { x }); }
+  else if (r < 0.84) { audio.whisper(pan); scene.trigger('whisper', { x }); }
+  else if (r < 0.94) { scene.trigger('shift', { x }); }
+  else { scene.trigger('phone', { x }); }
+}
+
+function eventTick() {
+  if (!T || T.phase !== 'talk') return;
+  const el = (Date.now() - T.talkStart) / 1000;
+  T.attn.push(Math.round(S.A * 100) / 100);
+  const A = S.A, sil = S.silRun / 10, mood = T.mood;
+
+  // Crowd chatter follows attention; silence makes the room restless
+  const speakingCap = S.speaking ? 0.12 : 0.6;
+  audio.setCrowdLevel(Math.min(speakingCap, 0.04 + (1 - A) * 0.2 + (sil > 5 ? 0.18 : 0)));
+
+  if (el < 12) return;
+
+  const base = { supportive: 0.018, neutral: 0.03, tough: 0.05 }[mood];
+  const p = base * (1 + (1 - A) * 3) + (sil > 6 ? 0.12 : 0);
+  if (el - T.lastDistraction > 6 && Math.random() < p) { pickDistraction(); T.lastDistraction = el; }
+
+  if (sil > 9 && el - T.lastAwkward > 8) {
+    T.lastAwkward = el;
+    const x = scene.pickX(); audio.whisper(x * 2 - 1); scene.trigger('whisper', { x });
+    setTimeout(() => { const y = scene.pickX(); audio.chair(y * 2 - 1); scene.trigger('shift', { x: y }); }, 1400);
+  }
+
+  if (!T.did.late && T.total >= 180 && el > T.total * 0.2 && el < T.total * 0.7 && Math.random() < 0.02) {
+    T.did.late = true; audio.door(); audio.footsteps(5); scene.trigger('lateComer');
+  }
+  if (!T.did.ring && mood !== 'supportive' && el > 30 && Math.random() < 0.004) {
+    T.did.ring = true; const x = scene.pickX(); audio.phoneRing(x * 2 - 1); scene.trigger('phoneRing', { x });
+  }
+  if (!T.did.out && mood === 'tough' && A < 0.4 && el > 40 && Math.random() < 0.02) {
+    T.did.out = true; scene.trigger('walkOut'); setTimeout(() => audio.door(), 3500);
+  }
+  if (mood !== 'tough' && A > 0.75 && S.dyn > 0.5 && el - T.lastLaugh > 90 && Math.random() < 0.03) {
+    T.lastLaugh = el; audio.laugh(0.6); scene.trigger('laugh');
+  }
+  if (T.total >= 300 && A > 0.85 && el > T.total * 0.2 && el < T.total * 0.9 && el - T.lastClap > 240 && Math.random() < 0.02) {
+    T.lastClap = el; clap(3);
+  }
+}
+
+// ─── THE TALK ────────────────────────────────
+function runTalk() {
+  T.phase = 'talk';
+  T.talkStart = Date.now();
+  rec.start('talk');
+  loops.push(setInterval(monitorTick, 250));
+  loops.push(setInterval(eventTick, 1000));
+  return new Promise((resolve) => { T.endResolve = resolve; });
+}
+
+function endTalk(reason) {
+  if (!T || T.phase !== 'talk') return;
+  T.reason = reason;
+  T.talkEnd = Date.now();
+  T.actualSec = (T.talkEnd - T.talkStart) / 1000;
+  T.phase = 'closing';
+  const r = T.endResolve; T.endResolve = null;
+  r && r();
+}
+
+function bindEndHold() {
+  const el = $('stEnd'), fill = $('stEndFill');
+  let t = null;
+  const stop = () => { clearTimeout(t); fill.style.transition = 'width .2s'; fill.style.width = '0%'; };
+  el.onpointerdown = () => {
+    fill.style.transition = 'width 1.5s linear'; fill.style.width = '100%';
+    t = setTimeout(() => { stop(); if (T && T.phase === 'talk') endTalk('early'); else if (T && T.phase === 'qa') T.qaDone && T.qaDone(); }, 1500);
+  };
+  el.onpointerup = el.onpointerleave = el.onpointercancel = stop;
+}
+
+let hiddenAt = 0;
+function onVisibility() {
+  if (!T || T.over) return;
+  if (document.hidden) { hiddenAt = Date.now(); return; }
+  if (hiddenAt && Date.now() - hiddenAt > 8000 && T.phase === 'talk') { T.interrupted = true; endTalk('interrupted'); }
+  hiddenAt = 0;
+  if (!wakeLock) navigator.wakeLock?.request('screen').then(w => { wakeLock = w; }).catch(() => {});
+  audio && audio.ctx && audio.ctx.resume();
+}
+
+// ─── CLOSING ─────────────────────────────────
+async function runClose() {
+  await rec.stop();
+  const avg = T.attn.length ? T.attn.reduce((a, b) => a + b, 0) / T.attn.length : S.A;
+  T.avgAttention = avg;
+  scene.setMode('applause');
+  audio.setCrowdLevel(0.03);
+  if (T.reason === 'interrupted') return;
+
+  const quick = T.reason === 'early' && T.actualSec < 45;
+  const secs = T.mood === 'tough' && avg < 0.5 ? 3 : quick ? 3 : avg > 0.7 ? 10 : 6;
+  clap(secs, avg > 0.72 && T.mood !== 'tough' && T.reason === 'time');
+  await sleep(1500);
+  await audio.speak(STAGE.closeLine(), { kind: 'host' });
+  await sleep(Math.max(0, secs * 1000 - 5000));
+
+  // Q&A in roughly half of the sessions that were long enough to ask about
+  T.qa = (T.actualSec >= 60 && T.total >= 120 && Math.random() < 0.55) ? { questions: [], answers: [] } : null;
+}
+
+// ─── Q&A ─────────────────────────────────────
+async function runQA() {
+  T.phase = 'qa';
+  scene.setMode('qa');
+  scene.setMonitor({ elapsed: 0, total: 45, label: 'Q&A', state: 'ok', topic: T.topic });
+  audio.setCrowdLevel(0.28);
+  note('The host is collecting questions from the floor...', 0);
+
+  // Transcribe the talk now so the questions are about what was actually said
+  T.talkText = await transcribeKind('talk', (i, n) => note(`The host is collecting questions from the floor... (${i}/${n})`, 0));
+  let questions = [];
+  try {
+    const raw = await WORKERS.callClaude(
+      `You are an audience member after a talk titled "${T.topic}". Transcript:\n"""${T.talkText.slice(0, 12000)}"""\n\nWrite 2 short questions (under 18 words each) a real audience member would ask about what the speaker actually said: one friendly, one challenging. Return JSON only: {"questions":["...","..."]}`,
+      'You write realistic audience questions. Respond with valid JSON only.');
+    if (Array.isArray(raw?.questions)) questions = raw.questions.filter(q => typeof q === 'string').slice(0, 2);
+  } catch {}
+  if (questions.length < 2) {
+    const f = [...STAGE.FALLBACK_QUESTIONS].sort(() => Math.random() - 0.5);
+    questions = [...questions, ...f].slice(0, 2);
+  }
+  T.qa.questions = questions;
+
+  audio.setCrowdLevel(0.1);
+  note('', 1);
+  await audio.speak(STAGE.qaIntro, { kind: 'host' });
+
+  for (let i = 0; i < questions.length; i++) {
+    audio.setCrowdLevel(0.03);
+    scene.trigger('lean');
+    note('Question from the audience', 3000);
+    await audio.speak(questions[i], { kind: 'aud', pitch: i ? 0.9 : 1.15 });
+    audio.gong();
+    note('Your answer. 45 seconds. Tap Done when finished.', 5000);
+    S.silRun = 0;
+    rec.start(`qa${i}`);
+    const t0 = Date.now();
+    $('stDone').hidden = false;
+    await new Promise((resolve) => {
+      let finished = false;
+      const iv = setInterval(() => {
+        const el = (Date.now() - t0) / 1000;
+        scene.setMonitor({ elapsed: el, total: 45, label: 'ANSWER', state: el > 40 ? 'red' : el > 30 ? 'amber' : 'ok', topic: questions[i] });
+        if (el >= 45) done();
+      }, 250);
+      const done = () => { if (finished) return; finished = true; clearInterval(iv); $('stDone').hidden = true; T.qaDone = null; resolve(); };
+      T.qaDone = done;
+      $('stDone').onclick = done;
+    });
+    await rec.stop();
+  }
+  audio.setCrowdLevel(0.04);
+  scene.setMode('applause');
+  clap(4);
+  await audio.speak(STAGE.qaOutro, { kind: 'host' });
+  await sleep(2500);
+}
+
+// ─── FINISH ──────────────────────────────────
+async function finishStage() {
+  T.over = true;
+  document.removeEventListener('visibilitychange', onVisibility);
+  clearLoops();
+  const segs = rec ? rec.segments : [];
+  T.segments = segs;
+  if (!T.actualSec) T.actualSec = Math.max(0, ((T.talkEnd || Date.now()) - (T.talkStart || Date.now())) / 1000);
+  scene && scene.stop();
+  audio && audio.close();
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  stream = null; analyser = null;
+  leaveStage();
+  scene = null; audio = null;
+  renderReview();
+}
+
+// ─── TRANSCRIPTION ───────────────────────────
+const FILLER_PROMPT = 'Umm, so, uh, let me think... I, I mean, like, you know, it is basically, uh, about that.';
+
+async function transcribeSegment(seg) {
+  if (seg.text != null) return seg.text;
+  for (let a = 0; a < 2; a++) {
+    try {
+      const r = await WORKERS.transcribeAudio(seg.blob, { prompt: FILLER_PROMPT });
+      seg.text = (r.text || r.transcript || '').trim();
+      return seg.text;
+    } catch (e) { await sleep(800); }
+  }
+  seg.failed = true; seg.text = '';
+  return '';
+}
+
+async function transcribeKind(kindPrefix, onProgress) {
+  const segs = T.segments || rec.segments;
+  const mine = segs.filter(s => s.kind.startsWith(kindPrefix));
+  let out = [];
+  for (let i = 0; i < mine.length; i++) {
+    onProgress && onProgress(i + 1, mine.length);
+    out.push(await transcribeSegment(mine[i]));
+  }
+  return out.join(' ');
+}
+
+// ─── REVIEW ──────────────────────────────────
+function svgBars(vals, labels) {
+  const max = Math.max(...vals, 1);
+  return `<div class="bars">${vals.map((v, i) => `<div style="height:${Math.max(6, (v / max) * 100)}%"><span>${labels[i]}</span></div>`).join('')}</div>`;
+}
+
+function svgLine(vals) {
+  if (vals.length < 2) return '';
+  const step = Math.max(1, Math.floor(vals.length / 100));
+  const pts = vals.filter((_, i) => i % step === 0);
+  const w = 300, h = 70;
+  const d = pts.map((v, i) => `${(i / (pts.length - 1)) * w},${h - v * h}`).join(' ');
+  return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="80" preserveAspectRatio="none" style="background:var(--navy-light);border-radius:8px;">
+    <line x1="0" y1="${h / 2}" x2="${w}" y2="${h / 2}" stroke="var(--navy-border)" stroke-dasharray="3 4"/>
+    <polyline fill="none" stroke="var(--teal)" stroke-width="2" points="${d}"/></svg>`;
+}
+
+async function renderReview() {
+  $('headerTitle').textContent = 'Your talk';
+  backFn = () => { T = null; renderHome(); };
+  view(`<div class="flex flex-col items-center justify-center gap-4" style="padding:3rem 0;"><div class="spinner"></div><p class="body-sm text-muted" id="revMsg">Transcribing your talk...</p></div>`);
+
+  const talkSegs = T.segments.filter(s => s.kind === 'talk');
+  const qaSegs = T.segments.filter(s => s.kind.startsWith('qa'));
+  const msg = (t) => { const m = $('revMsg'); if (m) m.textContent = t; };
+
+  // Talk (reuse transcripts already made for Q&A)
+  const texts = [];
+  for (let i = 0; i < talkSegs.length; i++) { msg(`Transcribing your talk (${i + 1}/${talkSegs.length})...`); texts.push(await transcribeSegment(talkSegs[i])); }
+  const talkText = texts.join(' ').trim();
+  const qaTexts = [];
+  for (let i = 0; i < qaSegs.length; i++) { msg(`Transcribing your answers (${i + 1}/${qaSegs.length})...`); qaTexts.push(await transcribeSegment(qaSegs[i])); }
+  const failed = [...talkSegs, ...qaSegs].some(s => s.failed);
+
+  const words = talkText ? talkText.split(/\s+/).filter(Boolean).length : 0;
+  const mins = Math.max(T.actualSec, 1) / 60;
+  const wpm = Math.round(words / mins);
+  const fillers = STAGE.countFillers(talkText);
+  const stumbles = STAGE.stumbles(talkText);
+  const longWords = STAGE.longWords(talkText);
+
+  // Pauses from the live voice timeline
+  const pauses = [];
+  let run = 0;
+  T.speak.forEach((f, i) => {
+    if (!f) run++;
+    else { if (run >= 25) pauses.push({ at: (i - run) / 10, len: run / 10 }); run = 0; }
+  });
+  if (run >= 25) pauses.push({ at: (T.speak.length - run) / 10, len: run / 10 });
+  pauses.sort((a, b) => b.len - a.len);
+  const longestPause = pauses.length ? pauses[0].len : 0;
+  const speakPct = T.speak.length ? Math.round(100 * T.speak.reduce((a, b) => a + b, 0) / T.speak.length) : 0;
+
+  // Vocal variety: spread of loudness while speaking
+  const sp = T.rms.filter((_, i) => T.speak[i]);
+  let variety = 'n/a';
+  if (sp.length > 50) {
+    const m = sp.reduce((a, b) => a + b, 0) / sp.length;
+    const cov = Math.sqrt(sp.reduce((a, b) => a + (b - m) * (b - m), 0) / sp.length) / m;
+    variety = cov < 0.45 ? 'Flat' : cov < 0.7 ? 'Moderate' : 'Dynamic';
+  }
+
+  // Pace per segment
+  const paceVals = talkSegs.map((s, i) => {
+    const w = (texts[i] || '').split(/\s+/).filter(Boolean).length;
+    const m = Math.max((s.end - s.start) / 60000, 0.1);
+    return Math.round(w / m);
+  });
+
+  T.result = { talkText, qaTexts, words, wpm, fillers, pauses, longestPause, speakPct, variety, paceVals };
+
+  if (words < 20) {
+    view(`
+      <div class="empty-state" style="padding:3rem 0;">
+        <div class="empty-icon">🎤</div>
+        <p class="empty-title">Not enough speech to review</p>
+        <p class="empty-description">${failed ? 'Transcription failed, so nothing was scored. Check your connection and try again.' : 'We heard fewer than 20 words. Check that your mic works, and try again.'}</p>
+        <button class="btn btn-primary mt-4" id="againBtn">Try another topic</button>
+      </div>`);
+    $('againBtn').onclick = () => { cfg.topic = STAGE.pickTopic(); T = null; renderHome(); };
+    return;
+  }
+
+  msg('Your coach is reading the transcript...');
+  let coach = null;
+  try {
+    const top = fillers.top.map(([k, v]) => `${k} x${v}`).join(', ') || 'none';
+    const raw = await WORKERS.callClaude(
+      `Topic: "${T.topic}". Constraint given: ${T.twist || 'none'}. Target length ${T.targetMin} min, actually spoke ${mmss(T.actualSec)}${T.reason === 'early' ? ' (ended early)' : ''}. ${words} words, ${wpm} words per minute, fillers: ${top}, longest pause ${longestPause.toFixed(1)}s, vocal variety ${variety}.\n\nTranscript:\n"""${talkText.slice(0, 16000)}"""\n\nReturn JSON only: {"opening":"...","structure":"...","strongest":"...","fix":"...","nextTime":"..."}. Each value at most 45 words, direct and specific, quoting short phrases from the transcript. opening = how the first 30 seconds landed. structure = clear beginning, middle and end, and did it answer the topic and honour the constraint. strongest = the best moment. fix = the single most important thing to fix. nextTime = one concrete drill for the next talk.`,
+      'You are a blunt but kind public speaking coach. Respond with valid JSON only.');
+    if (raw && raw.opening) coach = raw;
+  } catch (e) { console.warn('Coach failed', e); }
+  T.result.coach = coach;
+
+  drawReview(failed);
+  saveTalk();
+}
+
+function drawReview(failed) {
+  const R = T.result;
+  const early = T.reason === 'early' || T.reason === 'interrupted';
+  const moodLabel = { supportive: 'Supportive', neutral: 'Neutral', tough: 'Tough' }[T.mood];
+  const pauseList = R.pauses.slice(0, 3).map(p => `${mmss(p.at)} (${p.len.toFixed(1)}s)`).join(', ');
+
+  view(`
+    <div class="topic-card mb-4">
+      <span class="badge badge-teal">${esc(T.genre)}</span>
+      <div class="body-md mt-2" style="font-weight:600;">${esc(T.topic)}</div>
+      <div class="body-xs text-muted mt-1">${mmss(T.actualSec)} of ${T.targetMin} min${early ? (T.reason === 'interrupted' ? ' · interrupted' : ' · ended early') : ''} · the room was ${moodLabel.toLowerCase()}</div>
+    </div>
+
+    <div class="stat-grid mb-4">
+      <div class="card"><div class="n">${R.wpm}</div><div class="body-xs text-muted">words / min</div></div>
+      <div class="card"><div class="n">${R.fillers.total}</div><div class="body-xs text-muted">filler words</div></div>
+      <div class="card"><div class="n">${R.longestPause.toFixed(1)}s</div><div class="body-xs text-muted">longest pause</div></div>
+      <div class="card"><div class="n">${R.speakPct}%</div><div class="body-xs text-muted">time speaking</div></div>
+      <div class="card"><div class="n">${R.variety}</div><div class="body-xs text-muted">vocal variety</div></div>
+      <div class="card"><div class="n">${R.words}</div><div class="body-xs text-muted">words</div></div>
+    </div>
+
+    ${R.coach ? `
+    <div class="card coach mb-4">
+      <p><b>Opening</b>${esc(R.coach.opening)}</p>
+      <p><b>Structure</b>${esc(R.coach.structure)}</p>
+      <p><b>Strongest moment</b>${esc(R.coach.strongest)}</p>
+      <p><b>Fix this first</b>${esc(R.coach.fix)}</p>
+      <p style="margin:0;"><b>Next drill</b>${esc(R.coach.nextTime)}</p>
+    </div>` : `<div class="card mb-4"><p class="body-sm text-secondary">The coach could not be reached this time, so there are no written notes. The numbers above are still yours.</p></div>`}
+
+    ${R.paceVals.length > 1 ? `<div class="card mb-4"><div class="subheading mb-3">Pace over time (words per minute)</div>${svgBars(R.paceVals, R.paceVals.map((_, i) => `${i * 4}m`))}<p class="body-xs text-muted mt-3">Comfortable speaking is roughly 120 to 160. Climbing numbers usually mean nerves.</p></div>` : ''}
+
+    <div class="card mb-4"><div class="subheading mb-2">How the room felt</div>${svgLine(T.attn)}<p class="body-xs text-muted mt-2">Higher means the crowd was with you. Dips follow silence, flat delivery or long pauses.</p></div>
+
+    <div class="card mb-4">
+      <div class="subheading mb-2">Delivery details</div>
+      <p class="body-sm text-secondary">${R.fillers.top.length ? 'Fillers: ' + esc(R.fillers.top.map(([k, v]) => `${k} (${v})`).join(', ')) : 'No filler words detected.'}</p>
+      ${R.pauses.length ? `<p class="body-sm text-secondary mt-2">Longest pauses at: ${esc(pauseList)}</p>` : ''}
+      <p class="body-xs text-muted mt-2">Transcription tends to hide some "um" and "uh", so the real filler count may be higher.</p>
+    </div>
+
+    ${R.fillers.total === 0 && !R.pauses.length ? '' : ''}
+    ${failed ? `<div class="card mb-4"><p class="body-sm" style="color:var(--amber);">Part of the audio could not be transcribed, so these numbers cover only what came through.</p></div>` : ''}
+
+    ${(() => { const st = STAGE.stumbles(R.talkText); return st.length ? `<div class="card mb-4"><div class="subheading mb-2">Stumble points</div>${st.map(s => `<p class="body-xs text-secondary" style="margin:6px 0;">${esc(s)}</p>`).join('')}</div>` : ''; })()}
+
+    ${(() => { const lw = STAGE.longWords(R.talkText); return lw.length ? `<div class="card mb-4"><div class="subheading mb-2">Long words you used</div><p class="body-xs text-muted mb-3">Tap any you stumbled on to add it to My Words.</p>${lw.map(w => `<span class="word-chip" data-addw="${esc(w)}">${esc(w)}</span>`).join('')}</div>` : ''; })()}
+
+    ${T.qa && T.qa.questions.length ? `<div class="card mb-4"><div class="subheading mb-2">Q&A</div>${T.qa.questions.map((q, i) => `<p class="body-sm" style="margin:8px 0 4px;"><b>Q${i + 1}.</b> ${esc(q)}</p><p class="body-xs text-secondary" style="margin:0 0 8px;">${esc(R.qaTexts[i] || '(no answer captured)')}</p>`).join('')}</div>` : ''}
+
+    <details class="card mb-4"><summary>Full transcript</summary><div class="transcript">${esc(R.talkText)}</div></details>
+
+    <p class="body-xs text-muted mb-3" id="saveState">Saving...</p>
+    <button class="btn btn-primary btn-lg mb-3" id="againBtn">Speak again, new topic</button>
+    <button class="btn btn-secondary btn-lg" id="homeBtn">Back to home</button>
+  `);
+
+  document.querySelectorAll('[data-addw]').forEach(el => el.addEventListener('click', () => {
+    QUICKWORD.add(el.dataset.addw, 'English', `From a stage talk: ${T.topic}`);
+    el.style.opacity = '0.4';
+  }));
+  $('againBtn').onclick = () => { cfg.topic = STAGE.pickTopic(); T = null; renderHome(); };
+  $('homeBtn').onclick = () => NAV.go('index.html');
+}
+
+async function saveTalk() {
+  const R = T.result;
+  const d = new Date();
+  const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const qaText = T.qa && T.qa.questions.length
+    ? '\n\n--- Q&A ---\n' + T.qa.questions.map((q, i) => `Q${i + 1}: ${q}\nA: ${R.qaTexts[i] || ''}`).join('\n\n') : '';
+  const coachText = R.coach ? Object.entries(R.coach).map(([k, v]) => `${k}: ${v}`).join('\n') : '';
+  const fields = {
+    'Topic': T.topic, 'Date': date, 'Genre': T.genre, 'Twist': T.twist || '',
+    'Target Minutes': T.targetMin, 'Actual Seconds': Math.round(T.actualSec),
+    'Words': R.words, 'Words Per Minute': R.wpm, 'Filler Count': R.fillers.total,
+    'Fillers Per Minute': Math.round((R.fillers.total / Math.max(T.actualSec / 60, 0.1)) * 10) / 10,
+    'Longest Pause Seconds': Math.round(R.longestPause * 10) / 10, 'Speaking Percent': R.speakPct,
+    'Crowd Mood': { supportive: 'Supportive', neutral: 'Neutral', tough: 'Tough' }[T.mood],
+    'Q&A Round': !!(T.qa && T.qa.questions.length), 'Ended Early': T.reason === 'early' || T.reason === 'interrupted',
+    'Transcript': (R.talkText + qaText).slice(0, 95000), 'Coach Notes': coachText,
+  };
+  const el = () => $('saveState');
+  try {
+    await AIRTABLE.create('Stage Talks', fields);
+    STORE.updateStreak();
+    if (el()) el().textContent = 'Saved to your history.';
+  } catch (e) {
+    console.warn('Save failed', e);
+    if (el()) { el().innerHTML = 'Could not save this talk. <button class="btn btn-secondary btn-sm" id="retrySave">Retry</button>'; $('retrySave').onclick = () => { el().textContent = 'Saving...'; saveTalk(); }; }
+  }
+}
+
+// ─── BOOT ────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  $('tabBar').innerHTML = '';
+  $('backBtn').addEventListener('click', () => backFn());
+  renderHome();
+  topUpTopics();
+});
+</script>
+</body>
+</html>

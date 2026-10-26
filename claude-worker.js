@@ -172,6 +172,10 @@ async function handleWhisper(request, env) {
   whisperForm.append('language', 'en');
   whisperForm.append('response_format', 'json');
 
+  // Optional prompt: used by the Stage to keep um/uh/like in the transcript.
+  const hint = formData.get('prompt');
+  if (hint && typeof hint === 'string') whisperForm.append('prompt', hint.slice(0, 400));
+
   const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${env.OPENAI_API_KEY}` },

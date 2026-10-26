@@ -4,7 +4,7 @@
   "description": "Your personal voice transformation system",
   "start_url": "./index.html",
   "display": "standalone",
-  "orientation": "portrait",
+  "orientation": "any",
   "background_color": "#0A0E1A",
   "theme_color": "#0A0E1A",
   "lang": "en",
@@ -57,6 +57,18 @@
       "short_name": "Clarity",
       "description": "Cork / pencil clarity drill",
       "url": "./clarity.html",
+      "icons": [
+        {
+          "src": "assets/icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Public Speaking Stage",
+      "short_name": "Stage",
+      "description": "Speak to a room of 100",
+      "url": "./stage.html",
       "icons": [
         {
           "src": "assets/icons/icon-192.png",

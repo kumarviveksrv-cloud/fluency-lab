@@ -126,9 +126,10 @@ const WORKERS = {
     return res.json();
   },
 
-  async transcribeAudio(blob) {
+  async transcribeAudio(blob, opts = {}) {
     const formData = new FormData();
     formData.append('audio', blob, 'recording.webm');
+    if (opts.prompt) formData.append('prompt', opts.prompt);
     const res = await fetch(`${this.BASE_URL}/transcribe`, {
       method: 'POST',
       body: formData,
