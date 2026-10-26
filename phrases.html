@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#0A0E1A">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>Phrase Vault · Fluency Lab</title>
+  <link rel="icon" href="favicon.ico" type="image/x-icon">
+  <link rel="stylesheet" href="design-system.css">
+  <style>
+    /* ── Filter sections ── */
+    .filter-section {
+      margin-bottom: var(--space-3);
+    }
+
+    .filter-label {
+      font-size: var(--text-xs);
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-weight: 500;
+      margin-bottom: var(--space-2);
+    }
+
+    /* ── Phrase list items ── */
+    .phrase-list-item {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2);
+      padding: var(--space-4);
+      background: var(--navy-mid);
+      border: 1px solid var(--navy-border);
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      transition: all var(--transition-fast);
+      text-decoration: none;
+      color: inherit;
+    }
+
+    .phrase-list-item:hover,
+    .phrase-list-item:active {
+      border-color: var(--teal-dim);
+      background: var(--navy-light);
+    }
+
+    .phrase-list-item-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: var(--space-3);
+    }
+
+    .phrase-list-item-text {
+      font-size: var(--text-base);
+      font-weight: 600;
+      color: var(--text-primary);
+      line-height: 1.4;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .phrase-list-item-bottom {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      flex-wrap: wrap;
+    }
+
+    .practice-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      padding: 2px 8px;
+      border-radius: var(--radius-full);
+      font-size: var(--text-xs);
+      font-weight: 600;
+      background: rgba(245, 166, 35, 0.12);
+      color: var(--amber);
+      font-family: var(--font-mono);
+    }
+
+    /* ── Streak badge ── */
+    .streak-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 10px;
+      border-radius: var(--radius-full);
+      font-size: var(--text-sm);
+      font-weight: 700;
+      background: rgba(245, 166, 35, 0.12);
+      color: var(--amber);
+      border: 1px solid rgba(245, 166, 35, 0.25);
+      font-family: var(--font-mono);
+    }
+
+    /* ── Phrase count summary ── */
+    .result-count {
+      font-size: var(--text-xs);
+      color: var(--text-muted);
+      text-align: right;
+      margin-bottom: var(--space-3);
+    }
+
+    /* ── Chevron ── */
+    .list-chevron {
+      color: var(--text-muted);
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+  </style>
+</head>
+<body>
+<div class="app-shell">
+
+  <!-- HEADER -->
+  <header class="app-header">
+    <div class="header-title">Phrase Vault</div>
+    <div id="streakBadge" class="streak-badge">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="var(--amber)" stroke="none">
+        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+      </svg>
+      <span id="streakCount">0</span>
+    </div>
+  </header>
+
+  <!-- CONTENT -->
+  <main class="app-content">
+
+    <!-- CATEGORY FILTER -->
+    <div class="filter-section">
+      <div class="filter-label">Category</div>
+      <div class="chip-group" id="categoryFilter" role="group" aria-label="Filter by category">
+        <button class="chip active" data-category="All">All</button>
+        <button class="chip" data-category="Opener">Opener</button>
+        <button class="chip" data-category="Reframe">Reframe</button>
+        <button class="chip" data-category="Control">Control</button>
+        <button class="chip" data-category="Exit">Exit</button>
+        <button class="chip" data-category="Deflect">Deflect</button>
+      </div>
+    </div>
+
+    <!-- MASTERY FILTER -->
+    <div class="filter-section">
+      <div class="filter-label">Mastery</div>
+      <div class="chip-group" id="masteryFilter" role="group" aria-label="Filter by mastery level">
+        <button class="chip active" data-mastery="All">All</button>
+        <button class="chip" data-mastery="Active">Active</button>
+        <button class="chip" data-mastery="New">New</button>
+        <button class="chip" data-mastery="Learning">Learning</button>
+        <button class="chip" data-mastery="Practicing">Practicing</button>
+        <button class="chip" data-mastery="Deployed">Deployed</button>
+        <button class="chip" data-mastery="Muscle Memory">Mastered</button>
+        <button class="chip" data-mastery="Signature Move">Signature</button>
+      </div>
+    </div>
+
+    <!-- RESULT COUNT -->
+    <div class="result-count" id="resultCount"></div>
+
+    <!-- PHRASE LIST -->
+    <div id="phraseListContainer">
+      <!-- Loaded by JS -->
+    </div>
+
+  </main>
+
+  <!-- TAB BAR -->
+  <div id="tabBarMount"></div>
+
+</div>
+
+<script src="app.js"></script>
+<script src="airtable.js"></script>
+<script>
+  // ─── STATE ────────────────────────────────────
+  let allPhrases = [];
+  let activeCategory = 'All';
+  let activeMastery = 'All';
+
+  // ─── INIT ─────────────────────────────────────
+  document.addEventListener('DOMContentLoaded', async () => {
+    // Mount tab bar
+    document.getElementById('tabBarMount').innerHTML = buildTabBar('phrases');
+
+    // Show streak
+    const streak = STORE.getStreak();
+    document.getElementById('streakCount').textContent = streak;
+
+    // Load phrases
+    await loadPhrases();
+
+    // Wire up category chips
+    document.getElementById('categoryFilter').addEventListener('click', e => {
+      const btn = e.target.closest('[data-category]');
+      if (!btn) return;
+      activeCategory = btn.dataset.category;
+      document.querySelectorAll('#categoryFilter .chip').forEach(c => c.classList.remove('active'));
+      btn.classList.add('active');
+      renderList();
+    });
+
+    // Wire up mastery chips
+    document.getElementById('masteryFilter').addEventListener('click', e => {
+      const btn = e.target.closest('[data-mastery]');
+      if (!btn) return;
+      activeMastery = btn.dataset.mastery;
+      document.querySelectorAll('#masteryFilter .chip').forEach(c => c.classList.remove('active'));
+      btn.classList.add('active');
+      renderList();
+    });
+  });
+
+  // ─── LOAD PHRASES ─────────────────────────────
+  async function loadPhrases() {
+    const container = document.getElementById('phraseListContainer');
+    showLoading(container, 'Loading phrases...');
+
+    try {
+      allPhrases = await AIRTABLE.getPhrases();
+      renderList();
+    } catch (err) {
+      console.error(err);
+      showError(container, 'Could not load phrases.', loadPhrases);
+    }
+  }
+
+  // ─── FILTER + RENDER ──────────────────────────
+  function renderList() {
+    const container = document.getElementById('phraseListContainer');
+
+    // Filter
+    let filtered = allPhrases.filter(r => {
+      const f = r.fields;
+      const catOk  = activeCategory === 'All' || f['Category'] === activeCategory;
+      const mastOk = activeMastery === 'All'
+        || (activeMastery === 'Active' && f['In Active Rotation'] === true)
+        || f['Mastery Level'] === activeMastery;
+      return catOk && mastOk;
+    });
+
+    // Sort by Priority Score desc (already sorted from API, but re-sort after filter)
+    filtered.sort((a, b) => (b.fields['Priority Score'] || 0) - (a.fields['Priority Score'] || 0));
+
+    // Update result count
+    document.getElementById('resultCount').textContent =
+      filtered.length === 0 ? '' : `${filtered.length} phrase${filtered.length !== 1 ? 's' : ''}`;
+
+    if (filtered.length === 0) {
+      container.innerHTML = `
+        <div class="empty-state">
+          <div style="width:48px;height:48px;opacity:0.3;margin:0 auto;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+              <line x1="9" y1="10" x2="15" y2="10"/>
+            </svg>
+          </div>
+          <div class="empty-title">No phrases yet</div>
+          <div class="empty-description">
+            ${activeCategory !== 'All' || activeMastery !== 'All'
+              ? 'Try adjusting your filters to see more phrases.'
+              : 'Add phrases to your vault to start building your speaking arsenal.'}
+          </div>
+        </div>
+      `;
+      return;
+    }
+
+    container.innerHTML = `<div class="list fade-in">${filtered.map(r => phraseItem(r)).join('')}</div>`;
+
+    // Tap listeners
+    container.querySelectorAll('[data-phrase-id]').forEach(el => {
+      el.addEventListener('click', () => {
+        NAV.go('phrase.html', { phraseId: el.dataset.phraseId });
+      });
+    });
+  }
+
+  // ─── PHRASE ITEM TEMPLATE ─────────────────────
+  function phraseItem(record) {
+    const f = record.fields;
+    const practiceCount = f['Practice Count'] || 0;
+    const mastery = f['Mastery Level'] || 'New';
+    const category = f['Category'] || '';
+
+    const practiceChip = practiceCount > 0
+      ? `<span class="practice-chip">×${practiceCount}</span>`
+      : '';
+
+    const activeIndicator = f['In Active Rotation']
+      ? `<span class="badge badge-teal" style="font-size:10px;padding:2px 6px;">Active</span>`
+      : '';
+
+    return `
+      <div class="phrase-list-item" data-phrase-id="${record.id}" role="button" tabindex="0"
+        aria-label="${(f['Phrase Text'] || '').replace(/"/g, '&quot;')}">
+        <div class="phrase-list-item-top">
+          <div class="phrase-list-item-text">${escapeHtml(f['Phrase Text'] || '—')}</div>
+          <svg class="list-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        </div>
+        <div class="phrase-list-item-bottom">
+          ${category ? `<span class="badge badge-teal" style="font-size:10px;padding:2px 8px;">${escapeHtml(category)}</span>` : ''}
+          ${MASTERY.badge(mastery)}
+          ${activeIndicator}
+          ${practiceChip}
+        </div>
+      </div>
+    `;
+  }
+
+  // ─── UTILS ────────────────────────────────────
+  function escapeHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+</script>
+</body>
+</html>

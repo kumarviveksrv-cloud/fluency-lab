@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#0A0E1A">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Log Conversation</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="favicon.ico" type="image/x-icon">
+  <link rel="stylesheet" href="design-system.css">
+  <style>
+    /* ── Sub-header nav ── */
+    .sub-header {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      height: var(--header-height);
+      background: rgba(10, 14, 26, 0.92);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--navy-border);
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+      padding: 0 var(--space-4);
+      padding-top: var(--safe-top);
+    }
+
+    .back-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: var(--radius-full);
+      background: var(--navy-light);
+      border: 1px solid var(--navy-border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      flex-shrink: 0;
+      color: var(--text-primary);
+      transition: all var(--transition-fast);
+    }
+
+    .back-btn:hover {
+      background: var(--navy-border);
+    }
+
+    /* ── Form layout ── */
+    .form-content {
+      padding: var(--space-4);
+      padding-bottom: calc(var(--space-10) + env(safe-area-inset-bottom, 0px));
+    }
+
+    .form-card {
+      background: var(--navy-mid);
+      border: 1px solid var(--navy-border);
+      border-radius: var(--radius-lg);
+      padding: var(--space-5);
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-5);
+      margin-bottom: var(--space-6);
+    }
+
+    .field-group {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2);
+    }
+
+    .field-label {
+      font-size: var(--text-sm);
+      font-weight: 500;
+      color: var(--text-secondary);
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+    }
+
+    .field-label .optional {
+      font-size: var(--text-xs);
+      color: var(--text-muted);
+      font-weight: 400;
+    }
+
+    /* ── Landing selector (radio-style buttons) ── */
+    .landing-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: var(--space-2);
+    }
+
+    .landing-option {
+      padding: var(--space-3) var(--space-2);
+      border-radius: var(--radius-md);
+      border: 1px solid var(--navy-border);
+      background: var(--navy-light);
+      cursor: pointer;
+      text-align: center;
+      transition: all var(--transition-fast);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: var(--space-1);
+    }
+
+    .landing-option .landing-emoji {
+      font-size: 20px;
+      line-height: 1;
+    }
+
+    .landing-option .landing-text {
+      font-size: var(--text-sm);
+      font-weight: 500;
+      color: var(--text-secondary);
+    }
+
+    .landing-option[data-selected="true"].nailed {
+      background: var(--teal-glow);
+      border-color: var(--teal);
+    }
+    .landing-option[data-selected="true"].nailed .landing-text { color: var(--teal); }
+
+    .landing-option[data-selected="true"].pretty-good {
+      background: rgba(59, 130, 246, 0.12);
+      border-color: var(--mastery-learning);
+    }
+    .landing-option[data-selected="true"].pretty-good .landing-text { color: var(--mastery-learning); }
+
+    .landing-option[data-selected="true"].awkward {
+      background: var(--amber-glow);
+      border-color: var(--amber);
+    }
+    .landing-option[data-selected="true"].awkward .landing-text { color: var(--amber); }
+
+    .landing-option[data-selected="true"].bombed {
+      background: var(--rose-glow);
+      border-color: var(--rose);
+    }
+    .landing-option[data-selected="true"].bombed .landing-text { color: var(--rose); }
+
+    /* ── Confidence slider ── */
+    .confidence-row {
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+    }
+
+    .confidence-labels {
+      display: flex;
+      justify-content: space-between;
+      margin-top: var(--space-1);
+    }
+
+    .confidence-label-text {
+      font-size: var(--text-xs);
+      color: var(--text-muted);
+    }
+
+    /* ── Submit button ── */
+    .submit-wrap {
+      padding-top: var(--space-2);
+    }
+
+    /* ── Recent logs section ── */
+    .recent-section {
+      margin-top: var(--space-2);
+    }
+
+    .log-card {
+      background: var(--navy-mid);
+      border: 1px solid var(--navy-border);
+      border-radius: var(--radius-lg);
+      padding: var(--space-4);
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2);
+    }
+
+    .log-card + .log-card {
+      margin-top: var(--space-3);
+    }
+
+    .log-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .log-date {
+      font-size: var(--text-xs);
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+    }
+
+    .log-situation {
+      font-size: var(--text-sm);
+      color: var(--text-secondary);
+      line-height: 1.4;
+      overflow: hidden;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+    }
+
+    .log-phrase {
+      font-size: var(--text-sm);
+      font-weight: 500;
+      color: var(--text-primary);
+      padding: var(--space-2) var(--space-3);
+      background: var(--navy-light);
+      border-radius: var(--radius-sm);
+      border-left: 3px solid var(--teal);
+    }
+
+    /* Landing-specific badge colors */
+    .badge-nailed    { background: var(--teal-glow);               color: var(--teal); }
+    .badge-pretty    { background: rgba(59,130,246,0.12);          color: var(--mastery-learning); }
+    .badge-awkward   { background: var(--amber-glow);              color: var(--amber); }
+    .badge-bombed    { background: var(--rose-glow);               color: var(--rose); }
+
+    /* ── Submitting overlay ── */
+    .submitting-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(10, 14, 26, 0.8);
+      backdrop-filter: blur(4px);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: var(--space-4);
+      z-index: 200;
+    }
+  </style>
+</head>
+<body>
+<div class="app-shell">
+
+  <!-- SUB-HEADER -->
+  <header class="sub-header">
+    <button class="back-btn" onclick="NAV.back()" aria-label="Go back">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="15 18 9 12 15 6"/>
+      </svg>
+    </button>
+    <h1 class="header-title">Log Conversation</h1>
+  </header>
+
+  <!-- CONTENT -->
+  <main class="form-content">
+
+    <!-- LOG FORM CARD -->
+    <form id="logForm" class="form-card" novalidate>
+
+      <!-- Situation Context -->
+      <div class="field-group">
+        <label class="field-label" for="situationContext">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          What situation were you in?
+        </label>
+        <textarea
+          id="situationContext"
+          class="textarea"
+          placeholder="e.g., Team meeting with a difficult stakeholder who kept interrupting..."
+          rows="3"
+          required
+        ></textarea>
+      </div>
+
+      <!-- Phrase Used -->
+      <div class="field-group">
+        <label class="field-label" for="phraseUsed">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          What phrase did you use?
+        </label>
+        <input
+          type="text"
+          id="phraseUsed"
+          class="input"
+          placeholder="e.g., Let me offer you a different lens on this..."
+          required
+        />
+      </div>
+
+      <!-- How It Landed -->
+      <div class="field-group">
+        <label class="field-label">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          How did it land?
+        </label>
+        <div class="landing-grid" id="landingGrid">
+          <div class="landing-option nailed" data-value="Nailed it" data-selected="false" role="radio" aria-checked="false" tabindex="0">
+            <span class="landing-emoji">🎯</span>
+            <span class="landing-text">Nailed it</span>
+          </div>
+          <div class="landing-option pretty-good" data-value="Pretty good" data-selected="false" role="radio" aria-checked="false" tabindex="0">
+            <span class="landing-emoji">👍</span>
+            <span class="landing-text">Pretty good</span>
+          </div>
+          <div class="landing-option awkward" data-value="Awkward" data-selected="false" role="radio" aria-checked="false" tabindex="0">
+            <span class="landing-emoji">😬</span>
+            <span class="landing-text">Awkward</span>
+          </div>
+          <div class="landing-option bombed" data-value="Bombed" data-selected="false" role="radio" aria-checked="false" tabindex="0">
+            <span class="landing-emoji">💥</span>
+            <span class="landing-text">Bombed</span>
+          </div>
+        </div>
+        <input type="hidden" id="howItLanded" required />
+      </div>
+
+      <!-- Their Reaction -->
+      <div class="field-group">
+        <label class="field-label" for="theirReaction">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          Their reaction?
+        </label>
+        <textarea
+          id="theirReaction"
+          class="textarea"
+          placeholder="What happened after you said it? How did they respond?"
+          rows="3"
+          required
+        ></textarea>
+      </div>
+
+      <!-- What I'd Do Differently -->
+      <div class="field-group">
+        <label class="field-label" for="whatDifferently">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.51"/></svg>
+          What I'd do differently
+          <span class="optional">optional</span>
+        </label>
+        <textarea
+          id="whatDifferently"
+          class="textarea"
+          placeholder="Hindsight coaching notes to your future self..."
+          rows="2"
+        ></textarea>
+      </div>
+
+      <!-- Confidence Level -->
+      <div class="field-group">
+        <label class="field-label" for="confidenceSlider">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          Confidence Level
+        </label>
+        <div class="confidence-row">
+          <input type="range" class="slider" id="confidenceSlider" min="1" max="10" value="6" style="flex:1;">
+          <span class="slider-label" id="confidenceValue">6</span>
+        </div>
+        <div class="confidence-labels">
+          <span class="confidence-label-text">Shaky</span>
+          <span class="confidence-label-text">Solid</span>
+          <span class="confidence-label-text">Commanding</span>
+        </div>
+      </div>
+
+      <!-- Submit -->
+      <div class="submit-wrap">
+        <button type="submit" class="btn btn-primary btn-lg" id="submitBtn">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          Log It
+        </button>
+      </div>
+
+    </form>
+
+    <!-- RECENT LOGS -->
+    <div class="recent-section">
+      <div class="section-header">
+        <span class="section-title">Recent Logs</span>
+        <span class="body-xs text-muted">Last 5</span>
+      </div>
+      <div id="recentLogs">
+        <!-- Populated by JS -->
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script src="app.js"></script>
+<script src="airtable.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', async () => {
+
+  // ── Confidence slider ──────────────────────────────────────
+  const confSlider = document.getElementById('confidenceSlider');
+  const confVal    = document.getElementById('confidenceValue');
+  confSlider.addEventListener('input', () => {
+    confVal.textContent = confSlider.value;
+  });
+
+  // ── Landing option radio behavior ─────────────────────────
+  const landingOptions = document.querySelectorAll('.landing-option');
+  const hiddenLanding  = document.getElementById('howItLanded');
+
+  function selectLanding(option) {
+    landingOptions.forEach(o => {
+      o.dataset.selected = 'false';
+      o.setAttribute('aria-checked', 'false');
+    });
+    option.dataset.selected = 'true';
+    option.setAttribute('aria-checked', 'true');
+    hiddenLanding.value = option.dataset.value;
+  }
+
+  landingOptions.forEach(option => {
+    option.addEventListener('click', () => selectLanding(option));
+    option.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        selectLanding(option);
+      }
+    });
+  });
+
+  // ── Form submission ────────────────────────────────────────
+  const form      = document.getElementById('logForm');
+  const submitBtn = document.getElementById('submitBtn');
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const situation  = document.getElementById('situationContext').value.trim();
+    const phrase     = document.getElementById('phraseUsed').value.trim();
+    const landing    = hiddenLanding.value;
+    const reaction   = document.getElementById('theirReaction').value.trim();
+    const different  = document.getElementById('whatDifferently').value.trim();
+    const confidence = parseInt(confSlider.value);
+
+    // Basic validation
+    if (!situation) { TOAST.error('Please describe your situation.'); return; }
+    if (!phrase)     { TOAST.error('Please enter the phrase you used.'); return; }
+    if (!landing)    { TOAST.error('Please select how it landed.'); return; }
+    if (!reaction)   { TOAST.error('Please describe their reaction.'); return; }
+
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = `<div class="spinner" style="width:18px;height:18px;"></div> Logging…`;
+
+    try {
+      const fields = {
+        'Situation Context':   situation,
+        'Phrase Used':         phrase,
+        'How It Landed':       landing,
+        'Their Reaction':      reaction,
+        'Confidence Level':    confidence,
+      };
+      if (different) fields['What I\'d Do Differently'] = different;
+
+      await AIRTABLE.logConversation(fields);
+
+      TOAST.success('Conversation logged! 🎯');
+      setTimeout(() => NAV.go('index.html'), 1500);
+
+    } catch (err) {
+      console.error(err);
+      TOAST.error('Could not save. Check your connection and try again.');
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Log It`;
+    }
+  });
+
+  // ── Load recent logs ───────────────────────────────────────
+  const recentLogs = document.getElementById('recentLogs');
+  showLoading(recentLogs, 'Loading recent logs…');
+
+  try {
+    const records = await AIRTABLE.getConversations(5);
+
+    if (!records || records.length === 0) {
+      recentLogs.innerHTML = `
+        <div class="empty-state" style="padding: 2rem 0;">
+          <div class="empty-icon">💬</div>
+          <p class="empty-title">No logs yet</p>
+          <p class="empty-description">Your real-world deployments will appear here.</p>
+        </div>
+      `;
+      return;
+    }
+
+    const landingBadge = (val) => {
+      const map = {
+        'Nailed it':  { cls: 'badge-nailed',  label: '🎯 Nailed it' },
+        'Pretty good':{ cls: 'badge-pretty',  label: '👍 Pretty good' },
+        'Awkward':    { cls: 'badge-awkward', label: '😬 Awkward' },
+        'Bombed':     { cls: 'badge-bombed',  label: '💥 Bombed' },
+      };
+      const entry = map[val] || { cls: 'badge-muted', label: val || '—' };
+      return `<span class="badge ${entry.cls}">${entry.label}</span>`;
+    };
+
+    const formatLogDate = (isoStr) => {
+      if (!isoStr) return '—';
+      try {
+        return new Date(isoStr).toLocaleDateString('en-IN', {
+          day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
+        });
+      } catch { return isoStr; }
+    };
+
+    recentLogs.innerHTML = records.map(r => {
+      const f = r.fields;
+      const situation = f['Situation Context'] || '';
+      const phrase    = f['Phrase Used'] || '—';
+      const landing   = f['How It Landed'] || '';
+      const dateStr   = f['Date & Time'] || '';
+
+      return `
+        <div class="log-card fade-in">
+          <div class="log-meta">
+            <span class="log-date">${formatLogDate(dateStr)}</span>
+            ${landingBadge(landing)}
+          </div>
+          ${situation ? `<p class="log-situation">${situation}</p>` : ''}
+          <div class="log-phrase">${phrase}</div>
+        </div>
+      `;
+    }).join('');
+
+  } catch (err) {
+    console.error(err);
+    showError(recentLogs, 'Could not load recent logs.', () => location.reload());
+  }
+
+});
+</script>
+</body>
+</html>
