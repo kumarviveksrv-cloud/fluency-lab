@@ -583,13 +583,15 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       const confidence  = f['Confidence Score']  ?? f['Confidence']  ?? null;
       const coherence   = f['Coherence Score']   ?? f['Coherence']   ?? null;
-      const charMatch   = f['Character Match']   ?? null;
-      const duration    = f['Duration (mins)']   ?? f['Duration']    ?? null;
+      // Stored as a 0-100 percentage; shown on the same /10 scale as Confidence and Coherence
+      const rawMatch    = f['Character Match %'] ?? f['Character Match'] ?? null;
+      const charMatch   = rawMatch !== null ? Math.round(rawMatch / 10) : null;
+      const duration    = f['Duration Minutes']  ?? f['Duration (mins)'] ?? f['Duration'] ?? null;
 
       const scores = [
         confidence !== null ? { label: 'Confidence',  val: confidence,  color: 'var(--teal)' }             : null,
         coherence  !== null ? { label: 'Coherence',   val: coherence,   color: 'var(--mastery-learning)' } : null,
-        charMatch  !== null ? { label: 'Character',   val: `${charMatch}%`, color: 'var(--mastery-signature)' } : null,
+        charMatch  !== null ? { label: 'Character',   val: charMatch, color: 'var(--mastery-signature)' } : null,
       ].filter(Boolean);
 
       return `
