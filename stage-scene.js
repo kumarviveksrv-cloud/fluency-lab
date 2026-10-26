@@ -101,6 +101,9 @@ function StageScene(canvas, opts) {
   this._bound = this._loop.bind(this);
   this._gl = { x: [], y: [], r: [], a: [], n: 0 };
   this._w = new Array(12);
+  this.photo = (StageScene.PHOTOS && StageScene.PHOTOS.base) ? StageScene.PHOTOS : null;
+  this.pw = { base: 1, bored: 0, engaged: 0, applause: 0 };
+  this.patches = []; this.glows = []; this._amb = 1.5; this._flash = 0;
   this._buildPeople();
   this._motes = [];
   var mr = mulberry32(this.seed + 31);
@@ -891,7 +894,132 @@ P.update = function (dt) {
       s.walkers.splice(i, 1);
     }
   }
-  // sound-driven reactions of crowd: voice nudges nodding in supportive mood (cheap, only occasionally)
+  if (s.photo) s._photoUpdate(dt);
+};
+
+/* ---------- photographic crowd (optional: needs StageScene.loadPhotos) ---------- */
+var PH_W = 1536, PH_H = 1024, PH_Y0 = 30;
+function sstep(x, a, b) { var t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); }
+StageScene.PHOTOS = null;
+StageScene.loadPhotos = function (base) {
+  if (StageScene.PHOTOS) return Promise.resolve(StageScene.PHOTOS);
+  var names = ['base', 'bored', 'engaged', 'applause'], out = {};
+  return Promise.all(names.map(function (n) {
+    return new Promise(function (res, rej) {
+      var im = new Image(); im.onload = function () { out[n] = im; res(); }; im.onerror = function () { rej(new Error('photo ' + n)); };
+      im.src = (base || '') + 'crowd-' + n + '.webp';
+    });
+  })).then(function () { StageScene.PHOTOS = out; return out; });
+};
+P._view = function () {
+  var W = this.W, H = this.H, k = Math.max(W / PH_W, H / (PH_H - PH_Y0 - 20));
+  return { k: k, sx0: (PH_W - W / k) / 2, sy0: PH_Y0 };
+};
+P._photoUpdate = function (dt) {
+  var s = this, A = s.att, t = s.t, tw;
+  if (s.mode === 'applause' || s.clapping) tw = { base: 0, bored: 0, engaged: 0, applause: 1 };
+  else {
+    var e = sstep(A, 0.55, 0.92) * (0.6 + 0.4 * (0.5 + 0.5 * Math.sin(t * 0.7 + 1)));
+    var b = sstep(A, 0.52, 0.12) * (0.65 + 0.35 * (0.5 + 0.5 * Math.sin(t * 0.5)));
+    if (s.mode === 'prep') { b = Math.max(b, 0.25 * s.L.chat); e = 0; }
+    if (s.mode === 'intro') { e = 0; b *= 0.5; }
+    tw = { base: Math.max(0.12, 1 - e - b), bored: b, engaged: e, applause: 0 };
+  }
+  var k = 1 - Math.exp(-dt * (tw.applause > 0.5 || s.pw.applause > 0.2 ? 3 : 1.1)), n;
+  for (n in tw) s.pw[n] += (tw[n] - s.pw[n]) * k;
+  // ambient: a head tilts or someone shifts every couple of seconds
+  s._amb -= dt;
+  if (s._amb <= 0) { s._amb = 1.2 + Math.random() * 2.4; if (!s.clapping && s.mode !== 'applause') s._patch(0.06 + Math.random() * 0.88, Math.random() < 0.5 ? 'shift' : 'tilt'); }
+  for (n = s.patches.length - 1; n >= 0; n--) { s.patches[n].u += dt / s.patches[n].dur; if (s.patches[n].u >= 1) s.patches.splice(n, 1); }
+  for (n = s.glows.length - 1; n >= 0; n--) { s.glows[n].u += dt / s.glows[n].dur; if (s.glows[n].u >= 1) s.glows.splice(n, 1); }
+  if (s._flash > 0) s._flash -= dt;
+};
+P._dom = function () {
+  var best = 'base', bw = -1, n;
+  for (n in this.pw) if (this.pw[n] > bw) { bw = this.pw[n]; best = n; }
+  return this.photo[best];
+};
+P._rowY = function () {
+  // rows of faces sit roughly between y=130 and y=570 in the photo; weight toward the middle
+  var u = (Math.random() + Math.random()) / 2; return 130 + u * 440;
+};
+P._patch = function (x01, kind, dur, y) {
+  var s = this; if (!s.photo || s.patches.length > 16) return null;
+  var ix = x01 * PH_W, iy = y || s._rowY(), hr = 14 + (iy - 100) * 0.085;
+  var pw = hr * 3.4, ph = hr * 4.0, v = s._view(), d = s.d;
+  var c = mk(pw * v.k * d, ph * v.k * d), g = c.getContext('2d');
+  g.drawImage(s._dom(), ix - pw / 2, iy - ph / 2, pw, ph, 0, 0, c.width, c.height);
+  var rg = g.createRadialGradient(c.width / 2, c.height / 2, Math.min(c.width, c.height) * 0.18, c.width / 2, c.height / 2, Math.min(c.width, c.height) * 0.5);
+  rg.addColorStop(0, 'rgba(0,0,0,1)'); rg.addColorStop(1, 'rgba(0,0,0,0)');
+  g.globalCompositeOperation = 'destination-in'; g.fillStyle = rg; g.fillRect(0, 0, c.width, c.height);
+  var p = { c: c, ix: ix, iy: iy, hr: hr, pw: pw, ph: ph, kind: kind, u: 0, dur: dur || 1.6, dir: Math.random() < 0.5 ? -1 : 1 };
+  s.patches.push(p); return p;
+};
+P._photoDraw = function (g, swx, swy) {
+  var s = this, ph = s.photo, v = s._view(), W = s.W, H = s.H, n, a, S;
+  var breath = 1 + 0.004 * Math.sin(s.t * 0.8) + (s.ovation ? 0.006 * Math.abs(Math.sin(s.t * 4)) : 0);
+  var k = v.k * breath, sw = W / k, sh = H / k;
+  var sx = clamp(v.sx0 + (PH_W - W / v.k) * 0 - (breath - 1) * 0 + swx * 0.3 / v.k, 0, PH_W - sw), sy = clamp(v.sy0 + swy * 0.3 / v.k, 0, PH_H - sh);
+  var order = ['base', 'bored', 'engaged', 'applause'];
+  S = s.pw.base;
+  g.globalAlpha = 1; g.drawImage(ph.base, sx, sy, sw, sh, 0, 0, W, H);
+  for (n = 1; n < 4; n++) {
+    var w = s.pw[order[n]]; if (w < 0.004) continue;
+    S += w; a = w / S; g.globalAlpha = a; g.drawImage(ph[order[n]], sx, sy, sw, sh, 0, 0, W, H);
+  }
+  g.globalAlpha = 1;
+  s._vw = { k: k, sx: sx, sy: sy };
+  // moving heads
+  for (n = 0; n < s.patches.length; n++) {
+    var p = s.patches[n], u = p.u, env = Math.sin(Math.PI * clamp(u, 0, 1)); env = Math.min(1, env * 2.2);
+    var dx = 0, dy = 0, rot = 0;
+    switch (p.kind) {
+      case 'cough': dy = p.hr * 0.3 * Math.abs(Math.sin(u * Math.PI * 5)) * (1 - u * 0.5); rot = 0.04 * Math.sin(u * 30); break;
+      case 'clear': dy = p.hr * 0.16 * Math.abs(Math.sin(u * Math.PI * 3)); break;
+      case 'whisper': dx = p.dir * p.hr * 0.3 * env; rot = p.dir * 0.09 * env; break;
+      case 'shift': dx = p.dir * p.hr * 0.12 * Math.sin(u * Math.PI); dy = -p.hr * 0.08 * Math.sin(u * Math.PI); break;
+      case 'tilt': rot = p.dir * 0.06 * Math.sin(u * Math.PI); dy = p.hr * 0.04 * Math.sin(u * Math.PI); break;
+      case 'laugh': dy = -p.hr * 0.1 + p.hr * 0.12 * Math.abs(Math.sin(u * 30)); rot = 0.05 * Math.sin(u * 22); break;
+      case 'look': dx = p.dir * p.hr * 0.14 * env; rot = p.dir * 0.06 * env; break;
+    }
+    var cx = (p.ix - sx) * k + dx * k, cy = (p.iy - sy) * k + dy * k;
+    g.save(); g.globalAlpha = env; g.translate(cx, cy); g.rotate(rot);
+    g.drawImage(p.c, -p.pw * k / 2, -p.ph * k / 2, p.pw * k, p.ph * k); g.restore();
+  }
+  g.globalAlpha = 1;
+};
+P._photoOverlays = function (g) {
+  var s = this, W = s.W, H = s.H, v = s._vw || s._view(), n;
+  g.globalCompositeOperation = 'lighter';
+  for (n = 0; n < s.glows.length; n++) {
+    var q = s.glows[n], cx = (q.ix - (v.sx || 0)) * (v.k), cy = (q.iy - (v.sy || 0)) * v.k, r = q.hr * v.k * (q.ring ? 3.4 : 2.6);
+    var fl = q.ring ? (Math.sin(q.u * 70) > 0 ? 1 : 0.35) : (0.7 + 0.2 * Math.sin(q.u * 20));
+    g.globalAlpha = fl * Math.min(1, (1 - q.u) * 4) * Math.min(1, q.u * 8);
+    g.drawImage(s.sp.blue, cx - r, cy - r, r * 2, r * 2);
+  }
+  if (s._flash > 0) { g.globalAlpha = Math.min(1, s._flash) * 0.8; g.drawImage(s.sp.warm, W * 0.9, H * 0.05, W * 0.2, H * 0.4); }
+  g.globalAlpha = 1;
+};
+P._photoTrigger = function (name, o) {
+  var s = this, x = (o.x == null ? 0.08 + Math.random() * 0.84 : o.x), res = { x: x }, i, y = s._rowY();
+  switch (name) {
+    case 'cough': s._patch(x, 'cough', 1.5, y); break;
+    case 'throatClear': s._patch(x, 'clear', 1.0, y); break;
+    case 'whisper': s._patch(x, 'whisper', 3.8, y); s._patch(Math.min(0.97, x + 0.035), 'whisper', 3.8, y); break;
+    case 'shift': for (i = 0; i < 3; i++) s._patch(0.06 + Math.random() * 0.88, 'shift', 1.8 + Math.random(), null); break;
+    case 'phone': s.glows.push({ ix: x * PH_W, iy: y, hr: 14 + (y - 100) * 0.085, u: 0, dur: 9, ring: false }); break;
+    case 'phoneRing': s.glows.push({ ix: x * PH_W, iy: y, hr: 14 + (y - 100) * 0.085, u: 0, dur: 3.8, ring: true });
+      for (i = 0; i < 4; i++) s._patch(clamp(x + (Math.random() - 0.5) * 0.12, 0.05, 0.95), 'look', 2.2, y + (Math.random() - 0.5) * 60); break;
+    case 'laugh': for (i = 0; i < 9; i++) s._patch(0.06 + Math.random() * 0.88, 'laugh', 1.8 + Math.random(), null); break;
+    case 'lateComer': s._flash = 1.8; res.x = 0.96; break;
+    case 'walkOut': res.x = 0.95; setTimeout(function () { s._flash = 1.6; }, 3200); break;
+    case 'clapStart': s.clapping = true; break;
+    case 'clapStop': s.clapping = false; s.ovation = false; break;
+    case 'standOvation': s.ovation = true; s.clapping = true; break;
+    case 'settle': s.clapping = false; s.ovation = false; break;
+    case 'lean': for (i = 0; i < 5; i++) s._patch(0.06 + Math.random() * 0.88, 'look', 3, null); break;
+  }
+  return res;
 };
 
 /* ---------- public API ---------- */
@@ -918,13 +1046,17 @@ P.setMode = function (mode) {
     while (n < 3 && tries++ < 40) { var p = this._nearest(null); if (p.st !== ST.HAND) { this._later(p, ST.HAND, rr2(this, 8, 18), rr2(this, 0.4, 3)); n++; } }
   }
 };
-P.pickX = function () { var p = this._nearest(null); return p.x / this.W; };
+P.pickX = function () { if (this.photo) return 0.08 + Math.random() * 0.84;
+  return this._pickXp();
+};
+P._pickXp = function () { var p = this._nearest(null); return p.x / this.W; };
 P._endOvation = function () {
   this.ovation = false;
   for (var i = 0; i < this.ppl.length; i++) { var p = this.ppl[i]; if (!p.walk) p.standT = 0; }
 };
 P.trigger = function (name, o) {
   o = o || {}; var s = this, i, p, x01 = o.x, res = { x: 0.5 }, n, q;
+  if (s.photo) return s._photoTrigger(name, o);
   var W = s.W;
   switch (name) {
     case 'cough': case 'throatClear':
@@ -1169,6 +1301,8 @@ P.render = function () {
   var gl = s._gl; gl.n = 0;
   g.setTransform(d, 0, 0, d, 0, 0); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
   g.fillStyle = '#050408'; g.fillRect(0, 0, W, H);
+  var photo = s.photo;
+  if (photo) s._photoDraw(g, swx, swy); else {
   g.drawImage(s.hallC, -4 + Math.round(swx * 0.3 / q) * q, -4 + Math.round(swy * 0.3 / q) * q, W + 8, s.hallH);
   // back door (interior light + leaf)
   var dr = s.doorR, dv = s.door;
@@ -1189,12 +1323,14 @@ P.render = function () {
     for (j = 0; j < row.length; j++) { p = row[j]; if (!p.empty && !p.walk) s._person(g, p, ox, oy); }
   }
   for (i = 0; i < s.walkers.length; i++) s._walker(g, s.walkers[i], swx * 0.7, swy * 0.7);
+  }
   // lighting: darken the hall
-  var dark = 0.64 * (1 - L.house);
+  var dark = (photo ? 0.16 : 0.64) * (1 - L.house);
   if (dark > 0.01) { g.globalAlpha = dark; g.fillStyle = '#04050f'; g.fillRect(0, 0, W, s.hallH - 8); g.globalAlpha = 1; }
   g.globalCompositeOperation = 'lighter';
   var amb = 0.55 * (L.house - 0.3);
-  if (amb > 0.02) { g.globalAlpha = amb; g.fillStyle = '#40362e'; g.fillRect(0, 0, W, s.hallH - 8); }
+  if (amb > 0.02 && !photo) { g.globalAlpha = amb; g.fillStyle = '#40362e'; g.fillRect(0, 0, W, s.hallH - 8); }
+  if (!photo) {
   // ceiling light cones
   var ca = 0.1 + 0.16 * L.house + 0.1 * L.spot, cw = W * 0.2, ch = H * 0.62, cn = s.sp.cone;
   g.globalAlpha = ca;
@@ -1214,6 +1350,8 @@ P.render = function () {
   var sg = s.sign;
   g.globalAlpha = 0.65 + 0.1 * Math.sin(t * 2.1); g.drawImage(s.sp.green, sg.x - sg.w * 0.9, sg.y - sg.h * 1.8, sg.w * 1.8, sg.h * 3.6);
   if (dv > 0.02) { g.globalAlpha = dv * 0.8; g.drawImage(s.sp.warm, dr.x - dr.w * 0.8, dr.y, dr.w * 2.6, dr.h * 1.2); }
+  }
+  if (photo) s._photoOverlays(g);
   // dust motes
   g.globalAlpha = 0.22 + 0.3 * L.spot + 0.2 * L.house; g.fillStyle = '#ffe8c0'; g.beginPath();
   for (i = 0; i < s._motes.length; i++) {
@@ -1226,7 +1364,7 @@ P.render = function () {
     g.globalAlpha = gl.a[k]; g.drawImage(s.sp.blue, gl.x[k] - gl.r[k], gl.y[k] - gl.r[k], gl.r[k] * 2, gl.r[k] * 2);
   }
   g.globalCompositeOperation = 'source-over'; g.globalAlpha = 1;
-  g.drawImage(s.sp.exit, sg.x - sg.w / 2, sg.y - sg.h / 2, sg.w, sg.h);
+  if (!photo) g.drawImage(s.sp.exit, s.sign.x - s.sign.w / 2, s.sign.y - s.sign.h / 2, s.sign.w, s.sign.h);
   // dais
   var dz = s.dz, ox2 = Math.round(-swx * 1.6 / q) * q, oy2 = Math.round(-swy * 1.6 / q) * q, vib = s.voice;
   g.drawImage(s.daisC, -4 + ox2, dz.y0 - 4 + oy2, W + 8, s.daisC.height / d);

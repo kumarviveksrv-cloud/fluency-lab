@@ -3,7 +3,7 @@
    Caches app shell for offline use
    ============================================ */
 
-const CACHE_NAME = 'fluency-lab-v12';
+const CACHE_NAME = 'fluency-lab-v13';
 const CACHE_VERSION = 10;
 
 // Files to cache on install (app shell)
@@ -25,6 +25,10 @@ const APP_SHELL = [
   './stage-content.js',
   './stage-audio.js',
   './stage-scene.js',
+  './stage-assets/crowd-base.webp',
+  './stage-assets/crowd-bored.webp',
+  './stage-assets/crowd-engaged.webp',
+  './stage-assets/crowd-applause.webp',
   './manifest.json',
   './design-system.css',
   './app.js',

@@ -301,6 +301,7 @@ async function walkOn() {
   src.connect(analyser);
   rec = new TalkRecorder(stream);
 
+  try { await StageScene.loadPhotos('stage-assets/'); } catch (e) { console.warn('crowd photos unavailable, using drawn crowd'); }
   scene = new StageScene($('stageCanvas'), { mood: T.mood, seed: T.seed });
   fitCanvas();
   scene.setMode('prep');
@@ -845,6 +846,7 @@ document.addEventListener('DOMContentLoaded', () => {
   $('backBtn').addEventListener('click', () => backFn());
   renderHome();
   topUpTopics();
+  StageScene.loadPhotos('stage-assets/').catch(() => {});
 });
 </script>
 </body>
