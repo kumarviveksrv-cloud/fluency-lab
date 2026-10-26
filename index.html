@@ -178,9 +178,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     const f = mission.fields;
 
     // Fetch linked character and phrases
-    const [character, phrases, situation] = await Promise.all([
-      f['Today\'s Character']?.[0] ? AIRTABLE.getCharacterById(f['Today\'s Character'][0]) : null,
-      AIRTABLE.getTodayPhrases(),
+    const character = f['Today\'s Character']?.[0]
+      ? await AIRTABLE.getCharacterById(f['Today\'s Character'][0]) : null;
+    const [phrases, situation] = await Promise.all([
+      AIRTABLE.getTodayPhrases(character?.fields?.['Character Name']),
       f['Today\'s Situation']?.[0] ? AIRTABLE.getSituationById(f['Today\'s Situation'][0]) : null,
     ]);
 

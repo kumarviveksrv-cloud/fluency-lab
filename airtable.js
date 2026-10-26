@@ -108,7 +108,22 @@ const AIRTABLE = {
     return this.getById(this.TABLES.PHRASES, id);
   },
 
-  async getTodayPhrases() {
+  // Top 3 phrases (by Priority Score) for today's character.
+  // Rotation is automatic: the mission's character decides which phrases show.
+  // Falls back to the manual "In Active Rotation" flag if no character is given.
+  async getTodayPhrases(characterName) {
+    if (characterName) {
+      const safe = characterName.replace(/"/g, '\\"');
+      const data = await this.fetch(this.TABLES.PHRASES, {
+        'filterByFormula': `FIND("${safe}", ARRAYJOIN({Character}))`,
+        'sort[0][field]': 'Priority Score',
+        'sort[0][direction]': 'desc',
+        'sort[1][field]': 'Phrase Text',
+        'sort[1][direction]': 'asc',
+        'maxRecords': 3,
+      });
+      if (data.records.length) return data.records;
+    }
     const data = await this.fetch(this.TABLES.PHRASES, {
       'filterByFormula': `{In Active Rotation} = 1`,
       'maxRecords': 3,
