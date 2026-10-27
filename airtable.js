@@ -159,9 +159,14 @@ const AIRTABLE = {
     return this.getById(this.TABLES.SITUATIONS, id);
   },
 
+  localDate() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  },
+
   // ─── DAILY MISSIONS ───────────────────────
   async getTodayMission() {
-    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+    const today = this.localDate(); // local YYYY-MM-DD (UTC would show yesterday's mission before 5:30am IST)
     const data = await this.fetch(this.TABLES.MISSIONS, {
       'filterByFormula': `IS_SAME({Date}, "${today}", "day")`,
       'maxRecords': 1,
@@ -182,7 +187,7 @@ const AIRTABLE = {
   // ─── PRACTICE SESSIONS ────────────────────
   async createSession(fields) {
     return this.create(this.TABLES.SESSIONS, {
-      'Date': new Date().toISOString().split('T')[0],
+      'Date': this.localDate(),
       'Time of Day': this.getTimeOfDay(),
       ...fields,
     });
